@@ -11,7 +11,7 @@ use piston::input::{
     UpdateArgs, UpdateEvent,
 };
 use piston::window::WindowSettings;
-use piston::{ButtonState, Event};
+use piston::{ButtonState, Event, Loop};
 use std::vec::IntoIter;
 
 fn cursor_colors_iter() -> IntoIter<Color> {
@@ -54,6 +54,7 @@ pub struct App {
     cursor: Option<Cell>,
     cursor_colors_iter: IntoIter<Color>,
     cursor_paints: bool,
+    paused: bool
 }
 
 impl App {
@@ -88,6 +89,7 @@ impl App {
             cursor: None,
             cursor_colors_iter: cursor_colors_iter(),
             cursor_paints: false,
+            paused: true
         }
     }
 
@@ -123,6 +125,17 @@ impl App {
     fn handle_event(&mut self, e: &Event) {
         match e {
             Event::Loop(lp) => {
+                match lp {
+                    Loop::Render(args) => {
+                        self.render(&args);
+                    },
+                    Loop::Update(_) => {
+                        if !self.paused {
+                            self.update()
+                        }
+                    },
+                    _ => {}
+                }
                 // println!("Loop {:?}", lp)
             }
             Event::Input(input, _ts) => {
@@ -164,7 +177,7 @@ impl App {
                             Key::Up => {}
                             Key::Down => {}
                             Key::Space => {
-                                self.update();
+                                self.paused = !self.paused;
                             }
                             _ => {}
                         },
@@ -178,13 +191,11 @@ impl App {
             }
         }
 
-        if let Some(args) = e.render_args() {
-            self.render(&args);
-        }
+        
 
-        if let Some(args) = e.update_args() {
-            self.update()
-        }
+        // if let Some(args) = e.update_args() {
+        //     self.update()
+        // }
     }
 
     pub fn start() {
@@ -258,7 +269,61 @@ impl App {
     fn update(&mut self) {
         // Rotate 2 radians per second.
         // self.rotation += 2.0 * args.dt;
-        let write_cells = self.world.next();
+        fn is_alive(cell: Cell) -> bool {
+            let [r,g,b,_] = cell.color;
+
+            r + g + b > 0.0
+        }
+
+        
+
+        // fn is_alive(cell: Cell) -> bool {
+        //     let [r,g,b,a] = cell.color;
+
+        //     r + g + b > 0.0
+        // }
+
+        let the_rule = |[
+            [c11, c12, c13],
+            [c21, trg, c23],
+            [c31, c32, c33]
+        ]: [[Cell;3];3]| {
+            let alive = is_alive(trg);
+            let neighbors = [c11, c12, c13,c21, c23, c31, c32, c33];
+            let neighbors_alive = neighbors.iter().filter(|n|is_alive(**n));
+
+            if neighbors_alive.clone().count() >= 3 {
+                if alive {
+                    Some(Cell{
+                        color: BLACK,
+                        ..trg
+                    })
+                }
+                else {
+                    Some(Cell{
+                        color: WHITE,
+                        ..trg
+                    })
+                }
+            }
+            else if neighbors_alive.count() < 2 {
+                if alive {
+                    Some(Cell{
+                        color: BLACK,
+                        ..trg
+                    })
+                }
+                else {
+                    None
+                }
+            }
+            else {
+                None
+            }
+
+
+        };
+        let write_cells = self.world.next(the_rule);
         let mut write_cells_iter = write_cells.iter();
 
         while let Some(w_c) = write_cells_iter.next() {

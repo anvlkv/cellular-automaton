@@ -191,23 +191,18 @@ impl World {
         ]
     }
 
-    pub fn next(&mut self) -> Vec<Cell> {
+    pub fn next<F>(&self, func: F) -> Vec<Cell>
+        where F: Fn([[Cell;3];3])->Option<Cell>
+    {
         let cells_vec = self.get_cells();
         let mut cells = cells_vec.iter();
         let mut write_cells = Vec::new();
 
         while let Some(cell) = cells.next() {
             let surroundings = self.get_surroundings(cell.at);
-            let mut surroundings_iter = surroundings.iter().flatten();
-
-            while let Some(compare) = surroundings_iter.next() {
-                if cell.at != compare.at && compare.color != [0.0, 0.0, 0.0, 1.0] {
-                    write_cells.push(Cell {
-                        at: cell.at.clone(),
-                        top_left: cell.top_left,
-                        ..{ compare.clone() }
-                    })
-                }
+            match func(surroundings) {
+                Some(c) => write_cells.push(c),
+                None => {}
             }
         }
 
