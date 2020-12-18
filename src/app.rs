@@ -1,39 +1,63 @@
 use super::world::{Cell, World};
 use conv::{ApproxFrom, RoundToNearest};
 use glutin_window::GlutinWindow;
+use graphics::color::{BLACK, WHITE};
+use graphics::types::Color;
 use opengl_graphics::{GlGraphics, OpenGL};
+use palette::{Gradient, Hsv, LinSrgba};
 use piston::event_loop::{EventSettings, Events};
 use piston::input::{
-    Button, 
-    ButtonArgs, 
-    Input, 
-    Motion, 
-    MouseButton,
-    RenderArgs, 
-    RenderEvent, 
-    ResizeArgs, 
-    UpdateArgs, 
-    UpdateEvent,
-    Key,
+    Button, ButtonArgs, Input, Key, Motion, MouseButton, RenderArgs, RenderEvent, ResizeArgs,
+    UpdateArgs, UpdateEvent,
 };
 use piston::window::WindowSettings;
-use piston::Event;
+use piston::{ButtonState, Event};
+use std::vec::IntoIter;
+
+fn cursor_colors_iter() -> IntoIter<Color> {
+    let cursor_gradient: Gradient<Hsv> = Gradient::new(vec![
+        Hsv::new(0.0, 1.0, 0.5),
+        Hsv::new(90.0, 1.0, 0.5),
+        Hsv::new(180.0, 1.0, 0.5),
+        Hsv::new(270.0, 1.0, 0.5),
+        Hsv::new(360.0, 1.0, 0.5),
+        Hsv::new(270.0, 1.0, 0.5),
+        Hsv::new(180.0, 1.0, 0.5),
+        Hsv::new(90.0, 1.0, 0.5),
+        Hsv::new(0.0, 1.0, 0.5),
+    ]);
+
+    let (start, mut end) = cursor_gradient.domain();
+    let mut colors_vec: Vec<Color> = Vec::new();
+
+    // println!("s: {}, e: {}", start, end);
+
+    while end > start {
+        let color = LinSrgba::from(cursor_gradient.get(end));
+        let (r, g, b, a) = color.into_components();
+
+        // println!("rgba, {}, {}, {}, {}", r, g, b, a);
+
+        colors_vec.push([r, g, b, a]);
+
+        end -= 0.005;
+    }
+
+    colors_vec.into_iter()
+}
 
 pub struct App {
     gl: GlGraphics, // OpenGL drawing backend.
     world: World,
     cell_size: f64,
     window: GlutinWindow,
-    cursor: Option<Cell>
+    cursor: Option<Cell>,
+    cursor_colors_iter: IntoIter<Color>,
+    cursor_paints: bool,
 }
 
 impl App {
-    fn size_world(window: &GlutinWindow) -> (usize, usize, f64) {
-        let monitor_id = window.ctx.window().get_current_monitor();
-        let screen_size = monitor_id.get_dimensions();
-
-        let width = ApproxFrom::<f64, RoundToNearest>::approx_from(screen_size.width).unwrap();
-        let height = ApproxFrom::<f64, RoundToNearest>::approx_from(screen_size.height).unwrap();
+    fn size_world(width: f64, height: f64) -> (usize, usize, f64) {
         let cell_size = App::get_cell_size(width, height);
 
         (
@@ -54,19 +78,20 @@ impl App {
             .build()
             .unwrap();
 
-        let (width, height, cell_size) = App::size_world(&window);
-        let world = World::new(width, height, cell_size);
+        let world = World::new(0, 0, 0.0);
 
         Self {
             gl: GlGraphics::new(opengl),
             window,
             world,
-            cell_size,
-            cursor: None
+            cell_size: 0.0,
+            cursor: None,
+            cursor_colors_iter: cursor_colors_iter(),
+            cursor_paints: false,
         }
     }
 
-    fn set_cursor(&mut self, [x, y]: [f64;2]) {
+    fn set_cursor(&mut self, [x, y]: [f64; 2]) {
         // self.world.find_cell_for_position(position)
 
         let cell_x = (x / self.cell_size) as usize;
@@ -74,8 +99,25 @@ impl App {
 
         let cell = self.world.cell_at(cell_x, cell_y);
 
-        self.cursor = Some(cell);
+        let color = match &self.cursor {
+            Some(c) => c.color,
+            None => WHITE,
+        };
 
+        self.cursor = Some(Cell { color, ..cell });
+
+        if (cell_x, cell_y) != cell.at {
+            self.cursor_colors_iter = cursor_colors_iter();
+        }
+    }
+
+    fn flow_cursor_color(&mut self, [x, y]: [f64; 2]) {
+        if let Some(mut cell) = self.cursor.as_mut() {
+            match self.cursor_colors_iter.next() {
+                Some(c) => cell.color = c,
+                None => self.cursor_colors_iter = cursor_colors_iter(),
+            }
+        }
     }
 
     fn handle_event(&mut self, e: &Event) {
@@ -90,59 +132,43 @@ impl App {
                         window_size,
                         draw_size: _,
                     }) => {
-                        if self.cell_size != App::get_cell_size(window_size[0], window_size[1]) {
-                            let (width, height, cell_size) = App::size_world(&self.window);
-                            self.world = World::new(width, height, cell_size);
-                            self.cell_size = cell_size;
-                        }
+                        let (width, height, cell_size) = App::size_world(window_size[0], window_size[1]);
+                        self.world = World::new(width, height, cell_size);
+                        self.cell_size = cell_size;
                     }
                     Input::Move(motion) => match motion {
                         Motion::MouseCursor(position) => {
+                            if self.cursor_paints {
+                                self.world.write(self.cursor.unwrap())
+                            }
                             self.set_cursor(*position);
                         }
-                        Motion::MouseScroll([x, y]) => {}
+                        Motion::MouseScroll(distance) => self.flow_cursor_color(*distance),
                         _ => {}
                     },
                     Input::Button(ButtonArgs {
                         state,
                         button,
                         scancode: _,
-                    }) => {
-                        // println!("s: {:?}", state);
-
-                        match button {
-                            Button::Mouse(b) => {
-                                match b {
-                                    MouseButton::Left => {
-                                    },
-                                    MouseButton::Right => {
-    
-                                    },
-                                    _ => {}
-                                }
-                            },
-                            Button::Keyboard(k) => {
-                                match k {
-                                    Key::Right => {
-    
-                                    },
-                                    Key::Left => {
-    
-                                    },
-                                    Key::Up => {
-    
-                                    },
-                                    Key::Down => {
-    
-                                    },
-                                    Key::Space => {
-    
-                                    },
-                                    _ => {}
-                                }
-                            },
+                    }) => match button {
+                        Button::Mouse(b) => match b {
+                            MouseButton::Left => {
+                                self.cursor_paints = state == &ButtonState::Press;
+                            }
+                            MouseButton::Right => {}
                             _ => {}
-                        }
+                        },
+                        Button::Keyboard(k) => match k {
+                            Key::Right => {}
+                            Key::Left => {}
+                            Key::Up => {}
+                            Key::Down => {}
+                            Key::Space => {
+                                self.update();
+                            }
+                            _ => {}
+                        },
+                        _ => {}
                     },
                     _ => {}
                 }
@@ -157,7 +183,7 @@ impl App {
         }
 
         if let Some(args) = e.update_args() {
-            self.update(&args);
+            self.update()
         }
     }
 
@@ -174,9 +200,9 @@ impl App {
     fn get_cell_size(a: f64, b: f64) -> f64 {
         let lesser = {
             if a > b {
-                a
-            } else {
                 b
+            } else {
+                a
             }
         };
 
@@ -197,33 +223,46 @@ impl App {
     fn render(&mut self, args: &RenderArgs) {
         use graphics::*;
 
-        const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
-        const WHITE: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
-
         let square = rectangle::square(0.0, 0.0, self.cell_size as f64);
-        let mut cells = self.world.cells_iter();
+        let cells_vec = self.world.get_cells();
+        let mut cells = cells_vec.iter();
         let cursor = self.cursor.clone();
 
         self.gl.draw(args.viewport(), |c, gl| {
             clear(WHITE, gl);
 
-            while let Some(Cell { color, top_left }) = cells.next() {
-                let transform = c.transform.trans(top_left[0], top_left[1]).scale(0.9, 0.9);
-                let rect = Rectangle::new(color);
+            while let Some(Cell {
+                color,
+                top_left,
+                at: _,
+            }) = cells.next()
+            {
+                let transform = c.transform.trans(top_left[0], top_left[1]);
+                let rect = Rectangle::new(*color);
                 rect.draw(square, &c.draw_state, transform, gl)
             }
 
-            if let Some(Cell { color, top_left }) = cursor {
-                let transform = c.transform.trans(top_left[0], top_left[1]).scale(0.9, 0.9);
-                let rect = Rectangle::new(WHITE);
+            if let Some(Cell {
+                color,
+                top_left,
+                at: _,
+            }) = cursor
+            {
+                let transform = c.transform.trans(top_left[0], top_left[1]);
+                let rect = Rectangle::new(color);
                 rect.draw(square, &c.draw_state, transform, gl)
             }
         });
     }
 
-    fn update(&mut self, args: &UpdateArgs) {
+    fn update(&mut self) {
         // Rotate 2 radians per second.
         // self.rotation += 2.0 * args.dt;
-        self.world.next();
+        let write_cells = self.world.next();
+        let mut write_cells_iter = write_cells.iter();
+
+        while let Some(w_c) = write_cells_iter.next() {
+            self.world.write(*w_c);
+        }
     }
 }

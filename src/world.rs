@@ -3,7 +3,8 @@ use nalgebra::Point;
 use nalgebra::Point2;
 use nalgebra::U2;
 use nalgebra::{Dynamic, Matrix, VecStorage};
-use piston::input::{Event, GenericEvent};
+// use piston::input::{Event, GenericEvent};
+use std::convert::TryInto;
 
 type XMatrix<T> = Matrix<T, Dynamic, Dynamic, VecStorage<T, Dynamic, Dynamic>>;
 
@@ -13,22 +14,27 @@ pub struct World {
     b_matrix: XMatrix<f32>,
     x_matrix: XMatrix<f64>,
     y_matrix: XMatrix<f64>,
+    width: usize,
+    height: usize,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Copy)]
 pub struct Cell {
     pub color: Color,
     pub top_left: Point<f64, U2>,
+    pub at: (usize, usize),
 }
 
 impl World {
     pub fn new(width: usize, height: usize, cell_size: f64) -> Self {
         let mut instance = Self {
-            r_matrix: XMatrix::from_element(width, height, 0.1),
-            g_matrix: XMatrix::from_element(width, height, 0.2),
-            b_matrix: XMatrix::from_element(width, height, 0.3),
+            r_matrix: XMatrix::from_element(width, height, 0.0),
+            g_matrix: XMatrix::from_element(width, height, 0.0),
+            b_matrix: XMatrix::from_element(width, height, 0.0),
             x_matrix: XMatrix::from_element(width, height, 0.0),
             y_matrix: XMatrix::from_element(width, height, 0.0),
+            width,
+            height,
         };
 
         instance.resize_cells(cell_size);
@@ -57,22 +63,14 @@ impl World {
 
     pub fn position(&mut self) {}
 
-    pub fn cells_iter<'a>(&'a self) -> impl Iterator<Item = Cell> + 'a {
-        let r_cells = self.r_matrix.iter();
-        let g_cells = self.g_matrix.iter();
-        let b_cells = self.b_matrix.iter();
-        let x_cells = self.x_matrix.iter();
-        let y_cells = self.y_matrix.iter();
+    pub fn get_cells(&self) -> Vec<Cell> {
+        let col_iter = self.r_matrix.column_iter().enumerate();
 
-        r_cells
-            .zip(g_cells)
-            .zip(b_cells)
-            .zip(x_cells)
-            .zip(y_cells)
-            .map(|((((r, g), b), x), y)| Cell {
-                color: [*r, *g, *b, 1.0],
-                top_left: Point2::new(*x, *y),
-            })
+        col_iter.flat_map(move |(col_index, col)| {
+            col.row_iter().enumerate().flat_map(|(row_index, row)| {
+                row.iter().map(move |_| self.cell_at(row_index, col_index)).collect::<Vec<Cell>>().into_iter()
+            }).collect::<Vec<Cell>>().into_iter()
+        }).collect::<Vec<Cell>>()
     }
 
     pub fn cell_at(&self, x: usize, y: usize) -> Cell {
@@ -84,15 +82,116 @@ impl World {
                 1.0,
             ],
             top_left: Point2::new(self.x_matrix[(x, y)], self.y_matrix[(x, y)]),
+            at: (x, y),
         }
+    }
+
+    pub fn write(
+        &mut self,
+        Cell {
+            at,
+            color: [r, g, b, _a],
+            top_left,
+        }: Cell,
+    ) {
+        let x = top_left[0];
+        let y = top_left[1];
+
+        self.r_matrix[at] = r;
+        self.g_matrix[at] = g;
+        self.b_matrix[at] = b;
+        self.x_matrix[at] = x;
+        self.y_matrix[at] = y;
     }
 
     // pub fn find_cell_for_position() {
     // }
 
-    pub fn next(&mut self) {
-        // self.r_matrix = self.r_matrix.clone() + self.g_matrix.clone();
-        // self.g_matrix = self.b_matrix.clone() - self.r_matrix.clone();
-        // self.b_matrix = self.g_matrix.clone() + self.b_matrix.clone();
+    fn get_surroundings(&self, (x, y): (usize, usize)) -> [[Cell; 3]; 3] {
+        // let mut slice_shape = (3, 3);
+        let mut add_x_before = None;
+        let mut add_x_after = None;
+        let mut add_y_before = None;
+        let mut add_y_after = None;
+
+        if x == 0 {
+            add_x_before = Some(self.width - 1);
+        } else if x == self.width - 1 {
+            add_x_after = Some(0);
+        }
+
+        if y == 0 {
+            add_y_before = Some(self.height - 1);
+        } else if y == self.height - 1 {
+            add_y_after = Some(0);
+        }
+
+        let surroundings: [(usize, usize); 9] = {
+            let mut cells = [(0, 0); 9];
+            let mut index = 0;
+            let cross: [isize; 3] = [-1, 0, 1];
+            for i_x in &cross {
+                for i_y in &cross {
+                    cells[index] = (
+                        {
+                            if i_x > &0 && add_x_after.is_some() {
+                                add_x_after.unwrap()
+                            } else if i_x < &0 && add_x_before.is_some() {
+                                add_x_before.unwrap()
+                            } else {
+                                (i_x + x as isize).try_into().unwrap()
+                            }
+                        },
+                        {
+                            if i_y > &0 && add_y_after.is_some() {
+                                add_y_after.unwrap()
+                            } else if i_y < &0 && add_y_before.is_some() {
+                                add_y_before.unwrap()
+                            } else {
+                                (i_y + y as isize).try_into().unwrap()
+                            }
+                        },
+                    );
+                    index += 1;
+                }
+            }
+
+            cells
+        };
+
+        let mut result: Vec<Cell> = Vec::new();
+
+        for (x, y) in surroundings.iter() {
+            result.push(self.cell_at(*x, *y));
+        }
+
+        [
+            [result[0], result[3], result[6]],
+            [result[1], result[4], result[7]],
+            [result[2], result[5], result[8]],
+        ]
+    }
+
+    pub fn next(&mut self) -> Vec<Cell> {
+        let cells_vec = self.get_cells();
+        let mut cells = cells_vec.iter();
+        let mut write_cells = Vec::new();
+
+        while let Some(cell) = cells.next() {
+            let surroundings = self.get_surroundings(cell.at);
+            let mut surroundings_iter = surroundings.iter().flatten();
+
+            while let Some(compare) = surroundings_iter.next() {
+                if cell.at != compare.at && compare.color != [0.0, 0.0, 0.0, 1.0] {
+                    write_cells.push(Cell {
+                        at: cell.at.clone(),
+                        top_left: cell.top_left,
+                        ..{ compare.clone() }
+                    })
+                }
+            }
+        }
+
+        write_cells
     }
 }
