@@ -1,5 +1,5 @@
 use super::world::{Cell, World};
-use conv::{ApproxFrom, RoundToNearest};
+use conv::{ApproxInto, RoundToNearest};
 use glutin_window::GlutinWindow;
 use graphics::color::{BLACK, WHITE};
 use graphics::types::Color;
@@ -94,8 +94,8 @@ impl App {
     fn set_cursor(&mut self, [x, y]: [f64; 2]) {
         // self.world.find_cell_for_position(position)
 
-        let cell_x = (x / self.cell_size) as usize;
-        let cell_y = (y / self.cell_size) as usize;
+        let cell_x: usize = (x / self.cell_size) as usize;
+        let cell_y: usize = (y / self.cell_size) as usize;
 
         let cell = self.world.cell_at(cell_x, cell_y);
 

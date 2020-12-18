@@ -18,7 +18,7 @@ pub struct World {
     height: usize,
 }
 
-#[derive(Clone, Debug, Copy)]
+#[derive(Clone, Debug, Copy, PartialEq)]
 pub struct Cell {
     pub color: Color,
     pub top_left: Point<f64, U2>,
@@ -61,16 +61,35 @@ impl World {
         }
     }
 
-    pub fn position(&mut self) {}
+    // pub fn find_position(&self, x: &f64, y: &f64) -> Option<Cell> {
+    //     let mut diag_iter = self
+    //         .r_matrix
+    //         .map_with_location(|x, y, _| Point2::new(x, y))
+    //         .diagonal()
+    //         .iter()
+    //         .map(|at| self.cell_at(at[0], at[1]))
+    //         .filter(|cell_at| {
+    //             &cell_at.top_left[0] >= x 
+    //             && &cell_at.top_left[1] >= y
+    //         });
+
+    //     while let Some(cell) = diag_iter.next() {
+    //         for i in cell.at.0..self.width {
+    //             if self.cell_at(i, cell.at.1).top_left[0] <= x {
+
+    //             }
+    //         }
+    //     }
+
+    //     todo!()
+    // }
 
     pub fn get_cells(&self) -> Vec<Cell> {
-        let col_iter = self.r_matrix.column_iter().enumerate();
-
-        col_iter.flat_map(move |(col_index, col)| {
-            col.row_iter().enumerate().flat_map(|(row_index, row)| {
-                row.iter().map(move |_| self.cell_at(row_index, col_index)).collect::<Vec<Cell>>().into_iter()
-            }).collect::<Vec<Cell>>().into_iter()
-        }).collect::<Vec<Cell>>()
+        self.r_matrix
+            .map_with_location(|x, y, _| Point2::new(x, y))
+            .iter()
+            .map(|at| self.cell_at(at[0], at[1]))
+            .collect::<Vec<Cell>>()
     }
 
     pub fn cell_at(&self, x: usize, y: usize) -> Cell {
