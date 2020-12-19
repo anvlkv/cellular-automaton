@@ -180,7 +180,7 @@ impl App {
                             Key::Up => {}
                             Key::Down => {}
                             Key::Space => {
-                                self.paused = !self.paused;
+                                self.paused = state == &ButtonState::Release;
                             }
                             _ => {}
                         },
