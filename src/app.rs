@@ -167,6 +167,9 @@ impl App {
                         Button::Mouse(b) => match b {
                             MouseButton::Left => {
                                 self.cursor_paints = state == &ButtonState::Press;
+                                if let Some(c) = self.cursor {
+                                    self.world.write(c);
+                                }
                             }
                             MouseButton::Right => {}
                             _ => {}
@@ -292,18 +295,27 @@ impl App {
             let neighbors = [c11, c12, c13,c21, c23, c31, c32, c33];
             let neighbors_alive = neighbors.iter().filter(|n|is_alive(**n));
 
-            if neighbors_alive.clone().count() >= 3 {
+            if neighbors_alive.clone().count() >= 4 {
                 if alive {
                     Some(Cell{
                         color: BLACK,
                         ..trg
                     })
+                    // None
                 }
                 else {
+                    None
+                }
+            }
+            else if neighbors_alive.clone().count() >= 3 {
+                if !alive {
                     Some(Cell{
                         color: WHITE,
                         ..trg
                     })
+                }
+                else {
+                    None
                 }
             }
             else if neighbors_alive.count() < 2 {
