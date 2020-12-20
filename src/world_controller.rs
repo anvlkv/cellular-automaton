@@ -84,6 +84,7 @@ impl WorldController {
         let cell_x: usize = (x / self.cell_size) as usize;
         let cell_y: usize = (y / self.cell_size) as usize;
 
+        println!("{}, {}", cell_x, cell_y);
         let cell = self.world.cell_at(cell_x, cell_y);
 
         let color = match &self.cursor {
@@ -218,7 +219,7 @@ impl WorldController {
         let cursor = self.cursor.clone();
 
         gl.draw(args.viewport(), |c, gl| {
-            clear(WHITE, gl);
+            clear(BLACK, gl);
 
             while let Some(Cell {
                 color,

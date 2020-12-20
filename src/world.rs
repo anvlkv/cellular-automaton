@@ -1,19 +1,15 @@
 use graphics::types::Color;
-use nalgebra::Point;
-use nalgebra::Point2;
-use nalgebra::U2;
-use nalgebra::{Dynamic, Matrix, VecStorage};
+use nalgebra::{Point2, Dynamic, Matrix, VecStorage, Point6};
+
 // use piston::input::{Event, GenericEvent};
 use std::convert::TryInto;
 
-type XMatrix<T> = Matrix<T, Dynamic, Dynamic, VecStorage<T, Dynamic, Dynamic>>;
+type WPoint = Point6<f64>;
+type WMatrix = Matrix<WPoint, Dynamic, Dynamic, VecStorage<WPoint, Dynamic, Dynamic>>;
+
 
 pub struct World {
-    r_matrix: XMatrix<f32>,
-    g_matrix: XMatrix<f32>,
-    b_matrix: XMatrix<f32>,
-    x_matrix: XMatrix<f64>,
-    y_matrix: XMatrix<f64>,
+    matrix: WMatrix,
     width: usize,
     height: usize,
 }
@@ -21,18 +17,14 @@ pub struct World {
 #[derive(Clone, Debug, Copy, PartialEq)]
 pub struct Cell {
     pub color: Color,
-    pub top_left: Point<f64, U2>,
+    pub top_left: Point2<f64>,
     pub at: (usize, usize),
 }
 
 impl World {
     pub fn new(width: usize, height: usize, cell_size: f64) -> Self {
         let mut instance = Self {
-            r_matrix: XMatrix::from_element(width, height, 0.0),
-            g_matrix: XMatrix::from_element(width, height, 0.0),
-            b_matrix: XMatrix::from_element(width, height, 0.0),
-            x_matrix: XMatrix::from_element(width, height, 0.0),
-            y_matrix: XMatrix::from_element(width, height, 0.0),
+            matrix: WMatrix::from_element(width, height, WPoint::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)),
             width,
             height,
         };
@@ -42,66 +34,54 @@ impl World {
         instance
     }
 
-    pub fn resize_cells(&mut self, cell_size: f64) {
-        let mut x_y_col_iter = self
-            .x_matrix
-            .column_iter_mut()
-            .zip(self.y_matrix.column_iter_mut());
-        let mut y = 0.0;
-        while let Some((mut x_col, mut y_col)) = x_y_col_iter.next() {
-            let mut x = 0.0;
-            let mut x_y_row_iter = x_col.row_iter_mut().zip(y_col.row_iter_mut());
+    fn locations_matrix(&self) -> Matrix<Point2<usize>, Dynamic, Dynamic, VecStorage<Point2<usize>, Dynamic, Dynamic>> {
+        self.matrix.map_with_location(|x, y, p| {
+            Point2::new(x, y)
+        })
+    }
 
-            while let Some((mut x_cell, mut y_cell)) = x_y_row_iter.next() {
-                x_cell[(0, 0)] = x;
-                y_cell[(0, 0)] = y;
-                x += cell_size;
-            }
-            y += cell_size;
+    pub fn resize_cells(&mut self, cell_size: f64) {
+        let locations_matrix = self.locations_matrix();
+        let mut locations_iter = locations_matrix.iter();
+
+        while let Some(location) = locations_iter.next() {
+            let x_index = location[0];
+            let y_index = location[1];
+            let w_point = &mut self.matrix[(x_index, y_index)];
+            w_point[4] = (x_index as f64) * cell_size;
+            w_point[5] = (y_index as f64) * cell_size;
         }
     }
 
-    // pub fn find_position(&self, x: &f64, y: &f64) -> Option<Cell> {
-    //     let mut diag_iter = self
-    //         .r_matrix
-    //         .map_with_location(|x, y, _| Point2::new(x, y))
-    //         .diagonal()
-    //         .iter()
-    //         .map(|at| self.cell_at(at[0], at[1]))
-    //         .filter(|cell_at| {
-    //             &cell_at.top_left[0] >= x 
-    //             && &cell_at.top_left[1] >= y
-    //         });
-
-    //     while let Some(cell) = diag_iter.next() {
-    //         for i in cell.at.0..self.width {
-    //             if self.cell_at(i, cell.at.1).top_left[0] <= x {
-
-    //             }
-    //         }
-    //     }
-
-    //     todo!()
-    // }
-
     pub fn get_cells(&self) -> Vec<Cell> {
-        self.r_matrix
-            .map_with_location(|x, y, _| Point2::new(x, y))
+        self.locations_matrix()
             .iter()
-            .map(|at| self.cell_at(at[0], at[1]))
-            .collect::<Vec<Cell>>()
+            .map(|location| {
+                let x = location[0];
+                let y = location[1];
+                self.cell_at(x, y)
+            })
+            .collect()
     }
 
-    pub fn cell_at(&self, x: usize, y: usize) -> Cell {
+    pub fn cell_at(&self, x_index: usize, y_index: usize) -> Cell {
+        let w_point = self.matrix[(x_index, y_index)];
+        let r = w_point[0];
+        let g = w_point[1];
+        let b = w_point[2];
+        let a = w_point[3];
+        let x = w_point[4];
+        let y = w_point[5];
+
         Cell {
             color: [
-                self.r_matrix[(x, y)],
-                self.g_matrix[(x, y)],
-                self.b_matrix[(x, y)],
-                1.0,
+                r as f32,
+                g as f32,
+                b as f32,
+                a as f32, 
             ],
-            top_left: Point2::new(self.x_matrix[(x, y)], self.y_matrix[(x, y)]),
-            at: (x, y),
+            top_left: Point2::new(x, y),
+            at: (x_index, y_index),
         }
     }
 
@@ -109,18 +89,21 @@ impl World {
         &mut self,
         Cell {
             at,
-            color: [r, g, b, _a],
+            color: [r, g, b, a],
             top_left,
         }: Cell,
     ) {
         let x = top_left[0];
         let y = top_left[1];
 
-        self.r_matrix[at] = r;
-        self.g_matrix[at] = g;
-        self.b_matrix[at] = b;
-        self.x_matrix[at] = x;
-        self.y_matrix[at] = y;
+        self.matrix[at] = WPoint::new(
+            r as f64,
+            g as f64,
+            b as f64,
+            a as f64,
+            x,
+            y
+        )
     }
 
     // pub fn find_cell_for_position() {
