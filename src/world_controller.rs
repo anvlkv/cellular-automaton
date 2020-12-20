@@ -79,23 +79,25 @@ impl WorldController {
     }
 
     fn set_cursor(&mut self, [x, y]: [f64; 2]) {
-        // self.world.find_cell_for_position(position)
+
 
         let cell_x: usize = (x / self.cell_size) as usize;
         let cell_y: usize = (y / self.cell_size) as usize;
 
-        println!("{}, {}", cell_x, cell_y);
-        let cell = self.world.cell_at(cell_x, cell_y);
-
-        let color = match &self.cursor {
-            Some(c) => c.color,
-            None => WHITE,
-        };
-
-        self.cursor = Some(Cell { color, ..cell });
-
-        if (cell_x, cell_y) != cell.at {
-            self.cursor_colors_iter = cursor_colors_iter();
+        match self.world.find_cell_at(cell_x, cell_y) {
+            Some(cell) => {
+                let color = match &self.cursor {
+                    Some(c) => c.color,
+                    None => WHITE,
+                };
+        
+                self.cursor = Some(Cell { color, ..cell });
+        
+                if (cell_x, cell_y) != cell.at {
+                    self.cursor_colors_iter = cursor_colors_iter();
+                }
+            }
+            None => {}
         }
     }
 

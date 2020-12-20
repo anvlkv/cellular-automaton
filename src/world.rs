@@ -1,8 +1,8 @@
 use graphics::types::Color;
 use nalgebra::{Point2, Dynamic, Matrix, VecStorage, Point6};
-
-// use piston::input::{Event, GenericEvent};
 use std::convert::TryInto;
+use conv::{ValueFrom, ApproxFrom};
+
 
 type WPoint = Point6<f64>;
 type WMatrix = Matrix<WPoint, Dynamic, Dynamic, VecStorage<WPoint, Dynamic, Dynamic>>;
@@ -64,7 +64,7 @@ impl World {
             .collect()
     }
 
-    pub fn cell_at(&self, x_index: usize, y_index: usize) -> Cell {
+    fn cell_at(&self, x_index: usize, y_index: usize) -> Cell {
         let w_point = self.matrix[(x_index, y_index)];
         let r = w_point[0];
         let g = w_point[1];
@@ -75,13 +75,22 @@ impl World {
 
         Cell {
             color: [
-                r as f32,
-                g as f32,
-                b as f32,
-                a as f32, 
+                f32::approx_from(r).unwrap(),
+                f32::approx_from(g).unwrap(),
+                f32::approx_from(b).unwrap(),
+                f32::approx_from(a).unwrap(), 
             ],
             top_left: Point2::new(x, y),
             at: (x_index, y_index),
+        }
+    }
+
+    pub fn find_cell_at(&self, x_index: usize, y_index: usize) -> Option<Cell> {
+        if self.width > y_index && self.height > x_index {
+            Some(self.cell_at(x_index, y_index))
+        }
+        else {
+            None
         }
     }
 
@@ -97,10 +106,10 @@ impl World {
         let y = top_left[1];
 
         self.matrix[at] = WPoint::new(
-            r as f64,
-            g as f64,
-            b as f64,
-            a as f64,
+            f64::value_from(r).unwrap(),
+            f64::value_from(g).unwrap(),
+            f64::value_from(b).unwrap(),
+            f64::value_from(a).unwrap(),
             x,
             y
         )
