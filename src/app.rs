@@ -38,14 +38,11 @@ impl App {
 
     pub fn start() {
         let mut app = Self::new();
-
+        
         let mut events = Events::new(EventSettings::new());
-
         while let Some(e) = events.next(&mut app.window) {
             app.world_controller.handle_event(&e, &mut app.gl);
         }
-        // std::thread::spawn(move || {
-        //  });
     }
 
 

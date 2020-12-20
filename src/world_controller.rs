@@ -78,10 +78,6 @@ impl WorldController {
         )
     }
 
-    pub fn run_updates(&mut self, _now: Instant) {
-
-    }
-
     fn set_cursor(&mut self, [x, y]: [f64; 2]) {
         // self.world.find_cell_for_position(position)
 
