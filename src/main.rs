@@ -8,6 +8,7 @@ extern crate palette;
 
 mod app;
 pub mod world;
+pub mod world_controller;
 
 use app::App;
 
