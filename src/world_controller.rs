@@ -8,13 +8,18 @@ use piston::input::{Button, ButtonArgs, Input, Key, Motion, MouseButton, RenderA
 use piston::{ButtonState, Event, Loop};
 use std::vec::IntoIter;
 
+enum CursorAction {
+    Paint,
+    Clear,
+}
+
 pub struct WorldController {
     world: World,
     cell_size: f64,
     frame_size: usize,
     cursor: Option<Cell>,
     cursor_colors_iter: IntoIter<Color>,
-    cursor_paints: bool,
+    cursor_action: Option<CursorAction>,
     paused: bool,
 }
 
@@ -53,7 +58,7 @@ impl WorldController {
             cell_size: 0.0,
             cursor: None,
             cursor_colors_iter: cursor_colors_iter(),
-            cursor_paints: false,
+            cursor_action: None,
             frame_size: 3,
             paused: true,
         }
@@ -123,8 +128,17 @@ impl WorldController {
                 }
                 Input::Move(motion) => match motion {
                     Motion::MouseCursor(position) => {
-                        if self.cursor_paints {
-                            self.world.write(self.cursor.unwrap());
+                        if let Some(action) = &self.cursor_action {
+                            match action {
+                                CursorAction::Paint => self.world.write(self.cursor.unwrap()),
+                                CursorAction::Clear => {
+                                    let cursor = self.cursor.unwrap();
+                                    self.world.write(Cell {
+                                        color: BLACK,
+                                        ..cursor
+                                    });
+                                }
+                            }
                         }
                         self.set_cursor(*position);
                     }
@@ -138,12 +152,27 @@ impl WorldController {
                 }) => match button {
                     Button::Mouse(b) => match b {
                         MouseButton::Left => {
-                            self.cursor_paints = state == &ButtonState::Press;
-                            if let Some(c) = self.cursor {
-                                self.world.write(c);
+                            if state == &ButtonState::Press {
+                                self.cursor_action = Some(CursorAction::Paint);
+                                if let Some(c) = self.cursor {
+                                    self.world.write(c);
+                                }
+                            } else {
+                                self.cursor_action = None;
                             }
                         }
-                        MouseButton::Right => {}
+                        MouseButton::Right => {
+                            if state == &ButtonState::Press {
+                                self.cursor_action = Some(CursorAction::Clear);
+                                let cursor = self.cursor.unwrap();
+                                self.world.write(Cell {
+                                    color: BLACK,
+                                    ..cursor
+                                });
+                            } else {
+                                self.cursor_action = None
+                            }
+                        }
                         _ => {}
                     },
                     Button::Keyboard(k) => match k {
