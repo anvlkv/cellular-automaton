@@ -177,24 +177,21 @@ impl World {
 
     pub fn next<F>(&self, func: F) -> Vec<Cell>
     where
-        F: Fn(Vec<Cell>, Cell) -> Option<Cell>,
+        F: Fn(Vec<Cell>, Cell) -> Option<Cell>
     {
         let cells_vec = self.get_cells();
         let mut cells = cells_vec.iter();
         let mut write_cells = Vec::new();
-
+        
         while let Some(cell) = cells.next() {
             let surroundings = self.get_surroundings(cell.at);
-            match func(surroundings.clone(), *cell) {
+            match &func(surroundings, *cell) {
                 Some(c) => {
-                    write_cells.push(c)
+                    write_cells.push(c);
                 },
                 None => {}
             }
-            // std::thread::spawn(|| {
-            // });
         }
-
         write_cells
     }
 }
