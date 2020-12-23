@@ -187,7 +187,7 @@ impl World {
             let surroundings = self.get_surroundings(cell.at);
             match &func(surroundings, *cell) {
                 Some(c) => {
-                    write_cells.push(c);
+                    write_cells.push(*c);
                 },
                 None => {}
             }
