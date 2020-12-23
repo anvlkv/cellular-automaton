@@ -1,26 +1,22 @@
-use opengl_graphics::GlGraphics;
-use super::world::{Cell, World};
-use conv::{ApproxInto, RoundToNearest};
+use crate::cell::Cell;
+use crate::world::World;
 use graphics::color::{BLACK, WHITE};
 use graphics::types::Color;
+use opengl_graphics::GlGraphics;
 use palette::{Gradient, Hsv, LinSrgba};
-use piston::input::{
-    Button, ButtonArgs, Input, Key, Motion, MouseButton, RenderArgs, RenderEvent, ResizeArgs,
-    UpdateArgs, UpdateEvent,
-};
+use piston::input::{Button, ButtonArgs, Input, Key, Motion, MouseButton, RenderArgs, ResizeArgs};
 use piston::{ButtonState, Event, Loop};
 use std::vec::IntoIter;
-use std::time::Instant;
 
 pub struct WorldController {
     world: World,
     cell_size: f64,
+    frame_size: usize,
     cursor: Option<Cell>,
     cursor_colors_iter: IntoIter<Color>,
     cursor_paints: bool,
-    paused: bool
+    paused: bool,
 }
-
 
 fn cursor_colors_iter() -> IntoIter<Color> {
     let cursor_gradient: Gradient<Hsv> = Gradient::new(vec![
@@ -38,16 +34,10 @@ fn cursor_colors_iter() -> IntoIter<Color> {
     let (start, mut end) = cursor_gradient.domain();
     let mut colors_vec: Vec<Color> = Vec::new();
 
-    // println!("s: {}, e: {}", start, end);
-
     while end > start {
         let color = LinSrgba::from(cursor_gradient.get(end));
         let (r, g, b, a) = color.into_components();
-
-        // println!("rgba, {}, {}, {}, {}", r, g, b, a);
-
         colors_vec.push([r, g, b, a]);
-
         end -= 0.005;
     }
 
@@ -64,7 +54,8 @@ impl WorldController {
             cursor: None,
             cursor_colors_iter: cursor_colors_iter(),
             cursor_paints: false,
-            paused: true
+            frame_size: 3,
+            paused: true,
         }
     }
 
@@ -72,15 +63,13 @@ impl WorldController {
         let cell_size = Self::get_cell_size(width, height);
 
         (
-            (width / cell_size) as usize,
-            (height / cell_size) as usize,
+            (height / cell_size) as usize, // count rows
+            (width / cell_size) as usize,  // count columns
             cell_size,
         )
     }
 
     fn set_cursor(&mut self, [x, y]: [f64; 2]) {
-
-
         let cell_x: usize = (x / self.cell_size) as usize;
         let cell_y: usize = (y / self.cell_size) as usize;
 
@@ -90,9 +79,7 @@ impl WorldController {
                     Some(c) => c.color,
                     None => WHITE,
                 };
-        
                 self.cursor = Some(Cell { color, ..cell });
-        
                 if (cell_x, cell_y) != cell.at {
                     self.cursor_colors_iter = cursor_colors_iter();
                 }
@@ -112,81 +99,69 @@ impl WorldController {
 
     pub fn handle_event(&mut self, e: &Event, gl: &mut GlGraphics) {
         match e {
-            Event::Loop(lp) => {
-                match lp {
-                    Loop::Render(args) => {
-                        self.render(&args, gl);
-                    },
-                    Loop::Update(_) => {
-                        if !self.paused {
-                            self.update()
-                        }
-                    },
-                    _ => {}
+            Event::Loop(lp) => match lp {
+                Loop::Render(args) => {
+                    self.render(&args, gl);
                 }
-                // println!("Loop {:?}", lp)
-            }
-            Event::Input(input, _ts) => {
-                // println!("Iput {:?}, {:?}", i, ts)
-                match input {
-                    Input::Resize(ResizeArgs {
-                        window_size,
-                        draw_size: _,
-                    }) => {
-                        let (width, height, cell_size) = Self::size_world(window_size[0], window_size[1]);
-                        self.world = World::new(width, height, cell_size);
-                        self.cell_size = cell_size;
+                Loop::Update(_) => {
+                    if !self.paused {
+                        self.update();
                     }
-                    Input::Move(motion) => match motion {
-                        Motion::MouseCursor(position) => {
-                            if self.cursor_paints {
-                                self.world.write(self.cursor.unwrap())
-                            }
-                            self.set_cursor(*position);
+                }
+                _ => {}
+            },
+            Event::Input(input, _ts) => match input {
+                Input::Resize(ResizeArgs {
+                    window_size,
+                    draw_size: _,
+                }) => {
+                    let (width, height, cell_size) =
+                        Self::size_world(window_size[0], window_size[1]);
+                    self.world = World::new(width, height, cell_size);
+                    self.cell_size = cell_size;
+                    self.world.mirror_edge(self.frame_size % 2);
+                }
+                Input::Move(motion) => match motion {
+                    Motion::MouseCursor(position) => {
+                        if self.cursor_paints {
+                            self.world.write(self.cursor.unwrap());
                         }
-                        Motion::MouseScroll(distance) => self.flow_cursor_color(*distance),
+                        self.set_cursor(*position);
+                    }
+                    Motion::MouseScroll(distance) => self.flow_cursor_color(*distance),
+                    _ => {}
+                },
+                Input::Button(ButtonArgs {
+                    state,
+                    button,
+                    scancode: _,
+                }) => match button {
+                    Button::Mouse(b) => match b {
+                        MouseButton::Left => {
+                            self.cursor_paints = state == &ButtonState::Press;
+                            if let Some(c) = self.cursor {
+                                self.world.write(c);
+                            }
+                        }
+                        MouseButton::Right => {}
                         _ => {}
                     },
-                    Input::Button(ButtonArgs {
-                        state,
-                        button,
-                        scancode: _,
-                    }) => match button {
-                        Button::Mouse(b) => match b {
-                            MouseButton::Left => {
-                                self.cursor_paints = state == &ButtonState::Press;
-                                if let Some(c) = self.cursor {
-                                    self.world.write(c);
-                                }
-                            }
-                            MouseButton::Right => {}
-                            _ => {}
-                        },
-                        Button::Keyboard(k) => match k {
-                            Key::Right => {}
-                            Key::Left => {}
-                            Key::Up => {}
-                            Key::Down => {}
-                            Key::Space => {
-                                self.paused = state == &ButtonState::Release;
-                            }
-                            _ => {}
-                        },
+                    Button::Keyboard(k) => match k {
+                        Key::Right => {}
+                        Key::Left => {}
+                        Key::Up => {}
+                        Key::Down => {}
+                        Key::Space => {
+                            self.paused = state == &ButtonState::Release;
+                        }
                         _ => {}
                     },
                     _ => {}
-                }
-            }
-            Event::Custom(eid, _arc, ts) => {
-                // println!("Custom {:?}, {:?}", eid, ts)
-            }
+                },
+                _ => {}
+            },
+            Event::Custom(_eid, _arc, _ts) => {}
         }
-
-        
-
-        // if let Some(args) = e.update_args() {
-        //     self.update()
-        // }
     }
 
     fn get_cell_size(a: f64, b: f64) -> f64 {
@@ -248,70 +223,44 @@ impl WorldController {
     }
 
     pub fn update(&mut self) {
-        // Rotate 2 radians per second.
-        // self.rotation += 2.0 * args.dt;
         fn is_alive(cell: Cell) -> bool {
-            let [r,g,b,_] = cell.color;
-
+            let [r, g, b, _] = cell.color;
             r + g + b > 0.0
         }
 
-        
-
-        // fn is_alive(cell: Cell) -> bool {
-        //     let [r,g,b,a] = cell.color;
-
-        //     r + g + b > 0.0
-        // }
-
-        let the_rule = |[
-            [c11, c12, c13],
-            [c21, trg, c23],
-            [c31, c32, c33]
-        ]: [[Cell;3];3]| {
+        let the_rule = |neighbors: Vec<Cell>, trg: Cell| {
             let alive = is_alive(trg);
-            let neighbors = [c11, c12, c13,c21, c23, c31, c32, c33];
-            let neighbors_alive = neighbors.iter().filter(|n|is_alive(**n));
-
+            let neighbors_alive = neighbors.iter().filter(|n| is_alive(**n));
             if neighbors_alive.clone().count() >= 4 {
                 if alive {
-                    Some(Cell{
+                    Some(Cell {
                         color: BLACK,
                         ..trg
                     })
-                    // None
-                }
-                else {
+                } else {
                     None
                 }
-            }
-            else if neighbors_alive.clone().count() >= 3 {
+            } else if neighbors_alive.clone().count() >= 3 {
                 if !alive {
-                    Some(Cell{
+                    Some(Cell {
                         color: WHITE,
                         ..trg
                     })
-                }
-                else {
+                } else {
                     None
                 }
-            }
-            else if neighbors_alive.count() < 2 {
+            } else if neighbors_alive.count() < 2 {
                 if alive {
-                    Some(Cell{
+                    Some(Cell {
                         color: BLACK,
                         ..trg
                     })
-                }
-                else {
+                } else {
                     None
                 }
-            }
-            else {
+            } else {
                 None
             }
-
-
         };
         let write_cells = self.world.next(the_rule);
         let mut write_cells_iter = write_cells.iter();
@@ -320,6 +269,4 @@ impl WorldController {
             self.world.write(*w_c);
         }
     }
-
-    
 }

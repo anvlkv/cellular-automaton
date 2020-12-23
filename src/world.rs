@@ -1,30 +1,26 @@
-use graphics::types::Color;
-use nalgebra::{Point2, Dynamic, Matrix, VecStorage, Point6};
-use std::convert::TryInto;
-use conv::{ValueFrom, ApproxFrom};
+use crate::cell::Cell;
+use nalgebra::{Dynamic, Matrix, Point2, Point6, VecStorage};
 
-
-type WPoint = Point6<f64>;
-type WMatrix = Matrix<WPoint, Dynamic, Dynamic, VecStorage<WPoint, Dynamic, Dynamic>>;
-
+pub type WPoint = Point6<f64>;
+pub type MPoint = Point2<usize>;
+type XMatrix<T> = Matrix<T, Dynamic, Dynamic, VecStorage<T, Dynamic, Dynamic>>;
+type WMatrix = XMatrix<WPoint>;
+type MMatrix = XMatrix<MPoint>;
 
 pub struct World {
     matrix: WMatrix,
+    surroundings_matrix: MMatrix,
+    edge_width: usize,
     width: usize,
     height: usize,
-}
-
-#[derive(Clone, Debug, Copy, PartialEq)]
-pub struct Cell {
-    pub color: Color,
-    pub top_left: Point2<f64>,
-    pub at: (usize, usize),
 }
 
 impl World {
     pub fn new(width: usize, height: usize, cell_size: f64) -> Self {
         let mut instance = Self {
-            matrix: WMatrix::from_element(width, height, WPoint::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)),
+            matrix: WMatrix::from_element(height, width, WPoint::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)),
+            surroundings_matrix: MMatrix::from_element(height + 2, width + 2, MPoint::new(0, 0)),
+            edge_width: 1,
             width,
             height,
         };
@@ -34,10 +30,10 @@ impl World {
         instance
     }
 
-    fn locations_matrix(&self) -> Matrix<Point2<usize>, Dynamic, Dynamic, VecStorage<Point2<usize>, Dynamic, Dynamic>> {
-        self.matrix.map_with_location(|x, y, p| {
-            Point2::new(x, y)
-        })
+    fn locations_matrix(
+        &self,
+    ) -> Matrix<MPoint, Dynamic, Dynamic, VecStorage<MPoint, Dynamic, Dynamic>> {
+        self.matrix.map_with_location(|x, y, _p| MPoint::new(x, y))
     }
 
     pub fn resize_cells(&mut self, cell_size: f64) {
@@ -66,125 +62,122 @@ impl World {
 
     fn cell_at(&self, x_index: usize, y_index: usize) -> Cell {
         let w_point = self.matrix[(x_index, y_index)];
-        let r = w_point[0];
-        let g = w_point[1];
-        let b = w_point[2];
-        let a = w_point[3];
-        let x = w_point[4];
-        let y = w_point[5];
-
-        Cell {
-            color: [
-                f32::approx_from(r).unwrap(),
-                f32::approx_from(g).unwrap(),
-                f32::approx_from(b).unwrap(),
-                f32::approx_from(a).unwrap(), 
-            ],
-            top_left: Point2::new(x, y),
-            at: (x_index, y_index),
-        }
+        (w_point, x_index, y_index).into()
     }
 
     pub fn find_cell_at(&self, x_index: usize, y_index: usize) -> Option<Cell> {
         if self.width > y_index && self.height > x_index {
             Some(self.cell_at(x_index, y_index))
-        }
-        else {
+        } else {
             None
         }
     }
 
-    pub fn write(
-        &mut self,
-        Cell {
-            at,
-            color: [r, g, b, a],
-            top_left,
-        }: Cell,
-    ) {
-        let x = top_left[0];
-        let y = top_left[1];
-
-        self.matrix[at] = WPoint::new(
-            f64::value_from(r).unwrap(),
-            f64::value_from(g).unwrap(),
-            f64::value_from(b).unwrap(),
-            f64::value_from(a).unwrap(),
-            x,
-            y
-        )
+    pub fn write(&mut self, cell: Cell) {
+        let (w_point, x, y) = cell.into();
+        self.matrix[(x, y)] = w_point;
     }
 
-    // pub fn find_cell_for_position() {
-    // }
+    pub fn mirror_edge(&mut self, edge_width: usize) {
+        let locations_matrix = self.locations_matrix();
 
-    fn get_surroundings(&self, (x, y): (usize, usize)) -> [[Cell; 3]; 3] {
-        // let mut slice_shape = (3, 3);
-        let mut add_x_before = None;
-        let mut add_x_after = None;
-        let mut add_y_before = None;
-        let mut add_y_after = None;
+        let top_slice = locations_matrix
+            .slice((self.height - edge_width, 0), (edge_width, self.width))
+            .map_with_location(|row, col, loc| Point2::new(Point2::new(row, col + edge_width), loc));
+        let bottom_slice = locations_matrix
+            .slice((0, 0), (edge_width, self.width))
+            .map_with_location(|row, col, loc| {
+                Point2::new(Point2::new(row + self.height + edge_width, col + edge_width), loc)
+            });
 
-        if x == 0 {
-            add_x_before = Some(self.width - 1);
-        } else if x == self.width - 1 {
-            add_x_after = Some(0);
-        }
+        let left_slice = locations_matrix
+            .slice((0, self.width - edge_width), (self.height, edge_width))
+            .map_with_location(|row, col, loc| {
+                Point2::new(Point2::new(row + edge_width, col), loc)
+            });
+        let right_slice = locations_matrix
+            .slice((0, 0), (self.height, edge_width))
+            .map_with_location(|row, col, loc| {
+                Point2::new(Point2::new(row + edge_width, col + self.width + edge_width), loc)
+            });
+        let top_left_slice = locations_matrix
+            .slice(
+                (self.height - edge_width, self.width - edge_width),
+                (edge_width, edge_width),
+            )
+            .map_with_location(|row, col, loc| {
+                Point2::new(Point2::new(row, col), loc)
+            });
+        let top_right_slice = locations_matrix
+            .slice((self.height - edge_width, 0), (edge_width, edge_width))
+            .map_with_location(|row, col, loc| {
+                Point2::new(Point2::new(row, col + self.width + edge_width), loc)
+            });
+        let bottom_left_slice = locations_matrix
+            .slice((0, self.width - edge_width), (edge_width, edge_width))
+            .map_with_location(|row, col, loc| {
+                Point2::new(Point2::new(row + self.height + edge_width, col), loc)
+            });
+        let bottom_right_slice = locations_matrix
+            .slice((0, 0), (edge_width, edge_width))
+            .map_with_location(|row, col, loc| {
+                Point2::new(
+                    Point2::new(
+                        row + self.height + edge_width,
+                        col + self.width + edge_width,
+                    ),
+                    loc,
+                )
+            });
 
-        if y == 0 {
-            add_y_before = Some(self.height - 1);
-        } else if y == self.height - 1 {
-            add_y_after = Some(0);
-        }
+        let zero_point = MPoint::new(0, 0);
+        let mut mirrored_matrix = locations_matrix.clone();
+        mirrored_matrix = mirrored_matrix.insert_columns(0, edge_width, zero_point);
+        mirrored_matrix =
+            mirrored_matrix.insert_columns(self.width + edge_width , edge_width, zero_point);
+        mirrored_matrix = mirrored_matrix.insert_rows(0, edge_width, zero_point);
+        mirrored_matrix =
+            mirrored_matrix.insert_rows(self.height + edge_width, edge_width, zero_point);
 
-        let surroundings: [(usize, usize); 9] = {
-            let mut cells = [(0, 0); 9];
-            let mut index = 0;
-            let cross: [isize; 3] = [-1, 0, 1];
-            for i_x in &cross {
-                for i_y in &cross {
-                    cells[index] = (
-                        {
-                            if i_x > &0 && add_x_after.is_some() {
-                                add_x_after.unwrap()
-                            } else if i_x < &0 && add_x_before.is_some() {
-                                add_x_before.unwrap()
-                            } else {
-                                (i_x + x as isize).try_into().unwrap()
-                            }
-                        },
-                        {
-                            if i_y > &0 && add_y_after.is_some() {
-                                add_y_after.unwrap()
-                            } else if i_y < &0 && add_y_before.is_some() {
-                                add_y_before.unwrap()
-                            } else {
-                                (i_y + y as isize).try_into().unwrap()
-                            }
-                        },
-                    );
-                    index += 1;
-                }
+        let slices = [
+            top_left_slice,
+            top_slice,
+            top_right_slice,
+            right_slice,
+            bottom_right_slice,
+            bottom_slice,
+            bottom_left_slice,
+            left_slice,
+        ];
+
+        for slice in slices.iter() {
+            for point in slice.iter() {
+                let insert_at = (point[0][0], point[0][1]);
+                let location = point[1];
+
+                mirrored_matrix[insert_at] = location;
             }
-
-            cells
-        };
-
-        let mut result: Vec<Cell> = Vec::new();
-
-        for (x, y) in surroundings.iter() {
-            result.push(self.cell_at(*x, *y));
         }
 
-        [
-            [result[0], result[3], result[6]],
-            [result[1], result[4], result[7]],
-            [result[2], result[5], result[8]],
-        ]
+        self.surroundings_matrix = mirrored_matrix;
+        self.edge_width = edge_width;
+    }
+
+    fn get_surroundings(&self, (x, y): (usize, usize)) -> Vec<Cell> {
+        let side = self.edge_width * 2 + 1;
+
+        let surroundings = self.surroundings_matrix.slice((x, y), (side, side));
+
+        surroundings
+            .iter()
+            .filter(|at| at[0] != x || at[1] != y)
+            .map(|at| self.cell_at(at[0], at[1]))
+            .collect()
     }
 
     pub fn next<F>(&self, func: F) -> Vec<Cell>
-        where F: Fn([[Cell;3];3])->Option<Cell>
+    where
+        F: Fn(Vec<Cell>, Cell) -> Option<Cell>,
     {
         let cells_vec = self.get_cells();
         let mut cells = cells_vec.iter();
@@ -192,10 +185,14 @@ impl World {
 
         while let Some(cell) = cells.next() {
             let surroundings = self.get_surroundings(cell.at);
-            match func(surroundings) {
-                Some(c) => write_cells.push(c),
+            match func(surroundings.clone(), *cell) {
+                Some(c) => {
+                    write_cells.push(c)
+                },
                 None => {}
             }
+            // std::thread::spawn(|| {
+            // });
         }
 
         write_cells
