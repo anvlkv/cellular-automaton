@@ -7,14 +7,7 @@ extern crate piston;
 extern crate palette;
 
 
-mod app;
+pub mod app;
 pub mod world;
 pub mod cell;
 pub mod world_controller;
-
-use app::App;
-
-fn main() {
-    // Change this to OpenGL::V2_1 if not working.
-    App::start();
-}

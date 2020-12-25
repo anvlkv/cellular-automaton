@@ -11,6 +11,7 @@ type MMatrix = XMatrix<MPoint>;
 pub struct World {
     matrix: WMatrix,
     surroundings_matrix: MMatrix,
+    locations_matrix: MMatrix,
     edge_width: usize,
     cols: usize,
     rows: usize,
@@ -21,11 +22,13 @@ impl World {
         let mut instance = Self {
             matrix: WMatrix::from_element(rows, cols, WPoint::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)),
             surroundings_matrix: MMatrix::from_element(rows + 2, cols + 2, MPoint::new(0, 0)),
+            locations_matrix: MMatrix::from_element(rows, cols, MPoint::new(0, 0)),
             edge_width: 1,
             cols,
             rows,
         };
 
+        instance.locations_matrix();
         instance.resize_cells(cell_size);
 
         instance
@@ -36,14 +39,13 @@ impl World {
     }
 
     fn locations_matrix(
-        &self,
-    ) -> Matrix<MPoint, Dynamic, Dynamic, VecStorage<MPoint, Dynamic, Dynamic>> {
-        self.matrix.map_with_location(|row, col, _p| MPoint::new(row, col))
+        &mut self,
+    ) {
+       self.locations_matrix = self.matrix.map_with_location(|row, col, _p| MPoint::new(row, col)).clone();
     }
 
     pub fn resize_cells(&mut self, cell_size: f64) {
-        let locations_matrix = self.locations_matrix();
-        let mut locations_iter = locations_matrix.iter();
+        let mut locations_iter = self.locations_matrix.iter();
 
         while let Some(location) = locations_iter.next() {
             let row = location[0];
@@ -57,7 +59,7 @@ impl World {
     }
 
     pub fn get_cells(&self) -> Vec<Cell> {
-        self.locations_matrix()
+        self.locations_matrix
             .iter()
             .map(|location| {
                 let row = location[0];
@@ -86,28 +88,26 @@ impl World {
     }
 
     pub fn mirror_edge(&mut self, edge_width: usize) {
-        let locations_matrix = self.locations_matrix();
-
-        let top_slice = locations_matrix
+        let top_slice = self.locations_matrix
             .slice((self.rows - edge_width, 0), (edge_width, self.cols))
             .map_with_location(|row, col, loc| Point2::new(Point2::new(row, col + edge_width), loc));
-        let bottom_slice = locations_matrix
+        let bottom_slice = self.locations_matrix
             .slice((0, 0), (edge_width, self.cols))
             .map_with_location(|row, col, loc| {
                 Point2::new(Point2::new(row + self.rows + edge_width, col + edge_width), loc)
             });
 
-        let left_slice = locations_matrix
+        let left_slice = self.locations_matrix
             .slice((0, self.cols - edge_width), (self.rows, edge_width))
             .map_with_location(|row, col, loc| {
                 Point2::new(Point2::new(row + edge_width, col), loc)
             });
-        let right_slice = locations_matrix
+        let right_slice = self.locations_matrix
             .slice((0, 0), (self.rows, edge_width))
             .map_with_location(|row, col, loc| {
                 Point2::new(Point2::new(row + edge_width, col + self.cols + edge_width), loc)
             });
-        let top_left_slice = locations_matrix
+        let top_left_slice = self.locations_matrix
             .slice(
                 (self.rows - edge_width, self.cols - edge_width),
                 (edge_width, edge_width),
@@ -115,17 +115,17 @@ impl World {
             .map_with_location(|row, col, loc| {
                 Point2::new(Point2::new(row, col), loc)
             });
-        let top_right_slice = locations_matrix
+        let top_right_slice = self.locations_matrix
             .slice((self.rows - edge_width, 0), (edge_width, edge_width))
             .map_with_location(|row, col, loc| {
                 Point2::new(Point2::new(row, col + self.cols + edge_width), loc)
             });
-        let bottom_left_slice = locations_matrix
+        let bottom_left_slice = self.locations_matrix
             .slice((0, self.cols - edge_width), (edge_width, edge_width))
             .map_with_location(|row, col, loc| {
                 Point2::new(Point2::new(row + self.rows + edge_width, col), loc)
             });
-        let bottom_right_slice = locations_matrix
+        let bottom_right_slice = self.locations_matrix
             .slice((0, 0), (edge_width, edge_width))
             .map_with_location(|row, col, loc| {
                 Point2::new(
@@ -138,7 +138,7 @@ impl World {
             });
 
         let zero_point = MPoint::new(0, 0);
-        let mut mirrored_matrix = locations_matrix.clone();
+        let mut mirrored_matrix = self.locations_matrix.clone();
         mirrored_matrix = mirrored_matrix.insert_columns(0, edge_width, zero_point);
         mirrored_matrix =
             mirrored_matrix.insert_columns(self.cols + edge_width , edge_width, zero_point);
@@ -170,7 +170,7 @@ impl World {
         self.edge_width = edge_width;
     }
 
-    fn get_surroundings(&self, (row, col): (usize, usize)) -> Vec<Cell> {
+    pub fn get_surroundings(&self, (row, col): (usize, usize)) -> Vec<Cell> {
         let side = self.edge_width * 2 + 1;
 
         let surroundings = self.surroundings_matrix.slice((row, col), (side, side));

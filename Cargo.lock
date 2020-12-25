@@ -99,6 +99,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bencher"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7dfdb4953a096c551ce9ace855a604d702e6e62d77fac690575ae347571717f5"
+
+[[package]]
 name = "bitflags"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -142,6 +148,7 @@ checksum = "4c0496836a84f8d0495758516b8621a622beb77c0fed418570e50764093ced48"
 name = "cellular-automaton"
 version = "0.1.0"
 dependencies = [
+ "bencher",
  "conv",
  "glutin 0.26.0",
  "nalgebra",

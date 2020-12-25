@@ -279,16 +279,16 @@ impl WorldController {
     }
 
     pub fn update(&mut self) {
-        enum Channels {
+        enum Chanels {
             Red,
             Green,
             Blue
         }
 
         fn is_alive(cell: &Cell) -> bool {
-            is_chanel_alive(cell, &Channels::Red)
-            || is_chanel_alive(cell, &Channels::Green)
-            || is_chanel_alive(cell, &Channels::Blue)
+            is_chanel_alive(cell, &Chanels::Red)
+            || is_chanel_alive(cell, &Chanels::Green)
+            || is_chanel_alive(cell, &Chanels::Blue)
         }
 
         fn is_super_nova(cell: &Cell) -> bool {
@@ -296,21 +296,21 @@ impl WorldController {
             (r + g + b) * a >= 3.0
         }
 
-        fn is_chanel_alive(cell: &Cell, ch: &Channels) -> bool {
+        fn is_chanel_alive(cell: &Cell, ch: &Chanels) -> bool {
             let [r, g, b, a] = cell.color;
             match ch {
-                Red => r * a > 0.0,
-                Green => g * a > 0.0,
-                Blue => b * a > 0.0
+                Chanels::Red => r * a > 0.0,
+                Chanels::Green => g * a > 0.0,
+                Chanels::Blue => b * a > 0.0
             }
         }
 
-        fn is_chanel_growing(cell: &Cell, ch: &Channels) -> bool {
+        fn is_chanel_growing(cell: &Cell, ch: &Chanels) -> bool {
             let [r, g, b, a] = cell.color;
             match ch {
-                Red => r * a > 0.5,
-                Green => g * a > 0.5,
-                Blue => b * a > 0.5
+                Chanels::Red => r * a > 0.5,
+                Chanels::Green => g * a > 0.5,
+                Chanels::Blue => b * a > 0.5
             }
         }
 
@@ -318,126 +318,41 @@ impl WorldController {
 
 
         let the_rule = |neighbors: Vec<Cell>, t_cell: Cell| {
-            const SPLIT_C: f32 = 0.5;
-            const LIVING_C: f32 = 0.89;
-
             let alive = is_alive(&t_cell);
-            let neighbors_alive: Vec<&Cell> = neighbors.iter().filter(|n| is_alive(*n)).collect();
-
-            if alive || neighbors_alive.len() > 0 {
-                let neighboring_sns: Vec<&Cell> = neighbors_alive.clone().into_iter().filter(|n| is_super_nova(n)).collect();
-                if is_super_nova(&t_cell) {
+            let neighbors_alive = neighbors.iter().filter(|n| is_alive(*n));
+            if neighbors_alive.clone().count() >= self.frame_size * 4 {
+                if alive {
                     Some(Cell {
                         color: DEAD,
                         ..t_cell
                     })
-                }
-                else if neighboring_sns.len() > 0 {
-                    let mut cell = Cell {
-                        ..t_cell
-                    };
-                    
-                    for sn in neighboring_sns {
-                        let (sn_row, sn_col) = sn.at;
-                        let (row, col) = t_cell.at;
-
-                        if sn_row == row {
-                            cell.color[0] += sn.color[0] * SPLIT_C;
-                            if sn_col > col {
-                                cell.color[2] += sn.color[2] * SPLIT_C;
-                            }
-                            else {
-                                cell.color[1] += sn.color[1] * SPLIT_C;
-                            }
-                        }
-                        else if sn_col == col {
-                            cell.color[2] += sn.color[2] * SPLIT_C;
-                            if sn_row > row {
-                                cell.color[2] += sn.color[2] * SPLIT_C;
-                            }
-                            else {
-                                cell.color[1] += sn.color[1] * SPLIT_C;
-                            }
-                        }
-                        else {
-                            if sn_row > row {
-                                cell.color[2] += sn.color[2] * SPLIT_C;
-                            }
-                            else if sn_col < col{
-                                cell.color[1] += sn.color[1] * SPLIT_C;
-                            }
-                            else {
-                                cell.color[0] += sn.color[0] * SPLIT_C;
-                            }
-                        }
-                    }
-
-                    if !is_alive(&cell) {
-                        cell.color[3] = 1.0;
-                    }
-
-                    Some(cell)
-                }
-                else if neighbors_alive.len() > 0 {
-                    let chs_arr = [Channels::Red, Channels::Green, Channels::Blue];
-                    let chs =  chs_arr.iter().enumerate();
-                    let mut cell = Cell {
-                        ..t_cell
-                    };
-
-                    for neighbor in neighbors_alive {
-                        for (at, ch) in chs.clone() {
-                            if is_chanel_growing(neighbor, &ch) {
-                                cell.color[at] +=  neighbor.color[at] * SPLIT_C
-                            }
-                            else if is_chanel_alive(neighbor, &ch) && is_chanel_alive(&t_cell, &ch) {
-                                cell.color[at] +=  neighbor.color[at] * SPLIT_C * SPLIT_C
-                            }
-                        }
-                    }
-
-                    if alive {
-                        for (at, ch) in chs.clone() {
-                            if is_chanel_alive(&t_cell, &ch) {
-                                cell.color[at] = cell.color[at] * LIVING_C;
-                            }
-                        }   
-                    }
-
-                    for (at, _ch) in chs.clone() {
-                        if cell.color[at] > 1.0 {
-                            let mut offset_at = at + 1;
-
-                            if at == 3 {
-                                offset_at = 0;
-                            }
-                            else if at == 0 {
-                                offset_at = 3;
-                            }
-
-                            cell.color[offset_at] += cell.color[offset_at] - 1.0;
-                            cell.color[at] = 1.0;
-                        }
-                    }
-
-                    if !is_alive(&cell) {
-                        cell.color[3] = 1.0;
-                    }
-
-                    Some(cell)
-                }
-                else {
+                } else {
                     None
                 }
-            }
-            else {
+            } else if neighbors_alive.clone().count() >= self.frame_size * 3 {
+                if !alive {
+                    Some(Cell {
+                        color: SUPER_NOVA,
+                        ..t_cell
+                    })
+                } else {
+                    None
+                }
+            } else if neighbors_alive.count() < self.frame_size * 2 {
+                if alive {                                                                                       
+                    Some(Cell {
+                        color: DEAD,
+                        ..t_cell
+                    })
+                } else {
+                    None
+                }
+            } else {
                 None
             }
         };
         let write_cells = self.world.next(the_rule);
         let mut write_cells_iter = write_cells.iter();
-
-        // println!("{:?}", write_cells);
 
         while let Some(w_c) = write_cells_iter.next() {
             self.world.write(*w_c);

@@ -7,7 +7,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [[bin]]
-name = "cellular-automaton"
+name = "bin"
+path = "src/bin/main.rs"
 
 [dependencies]
 piston = "0.52.0"
@@ -18,3 +19,14 @@ nalgebra = "0.23.1"
 glutin = "0.26.0"
 conv = "0.3.3"
 palette = "0.5.0"
+
+[[bench]]
+name = "world"
+harness = false
+
+[[bench]]
+name = "cell"
+harness = false
+
+[dev-dependencies]
+bencher = "0.1.5"
