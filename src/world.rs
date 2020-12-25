@@ -31,6 +31,10 @@ impl World {
         instance
     }
 
+    pub fn reset(&self, cell_size: f64) -> Self {
+        World::new(self.rows, self.cols, cell_size)
+    }
+
     fn locations_matrix(
         &self,
     ) -> Matrix<MPoint, Dynamic, Dynamic, VecStorage<MPoint, Dynamic, Dynamic>> {

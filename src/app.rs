@@ -3,7 +3,9 @@ use opengl_graphics::{GlGraphics, OpenGL};
 use piston::event_loop::{EventSettings, Events};
 use glutin_window::GlutinWindow;
 use piston::window::WindowSettings;
-
+// use piston::input::{Input, ResizeArgs};
+// use piston::{Event};
+// use piston::AdvancedWindow;
 
 pub struct App {
     gl: GlGraphics, // OpenGL drawing backend.
@@ -11,15 +13,16 @@ pub struct App {
     world_controller: WorldController
 }
 
+const OPEN_GL: OpenGL = OpenGL::V3_2;
+
 impl App {
     
 
     fn new() -> Self {
-        let opengl = OpenGL::V3_2;
+        
 
-        // Create an Glutin window.
         let window: GlutinWindow = WindowSettings::new("cellulose", [0, 0])
-            .graphics_api(opengl)
+            .graphics_api(OPEN_GL)
             .exit_on_esc(true)
             .fullscreen(true)
             .build()
@@ -28,7 +31,7 @@ impl App {
         let world_controller = WorldController::new();
 
         Self {
-            gl: GlGraphics::new(opengl),
+            gl: GlGraphics::new(OPEN_GL),
             window,
             world_controller
         }
@@ -42,6 +45,18 @@ impl App {
         let mut events = Events::new(EventSettings::new());
         while let Some(e) = events.next(&mut app.window) {
             app.world_controller.handle_event(&e, &mut app.gl);
+            // match &e {
+            //     Event::Input(input, _ts) => match input {
+            //         Input::Resize(ResizeArgs {
+            //             window_size,
+            //             draw_size,
+            //         }) => {
+            //             app.window.set_size(*draw_size);
+            //         },
+            //         _ => {}
+            //     },
+            //     _ => {}
+            // }
         }
     }
 
