@@ -63,7 +63,7 @@ impl WorldController {
             cursor: None,
             cursor_colors_iter: cursor_colors_iter(),
             cursor_action: None,
-            frame_size: 3,
+            frame_size: 1,
             paused: true,
             speed: 1
         }
@@ -132,7 +132,7 @@ impl WorldController {
                         Self::size_world(window_size[0], window_size[1]);
                     self.world = World::new(rows, cols, cell_size);
                     self.cell_size = cell_size;
-                    self.world.mirror_edge(self.frame_size % 2);
+                    self.world.mirror_edge(self.frame_size);
                 }
                 Input::Move(motion) => match motion {
                     Motion::MouseCursor(position) => {
@@ -190,14 +190,25 @@ impl WorldController {
                         Key::Left => {
                             self.speed -= 1;
                         }
-                        Key::Up => {}
-                        Key::Down => {}
+                        Key::Up => {
+                            self.frame_size += 1;
+                            self.world.mirror_edge(self.frame_size);
+                        }
+                        Key::Down => {
+                            if self.frame_size > 2 {
+                                self.frame_size -= 1;
+                            }
+                            else {
+                                self.frame_size = 1;
+                            }
+                            self.world.mirror_edge(self.frame_size);
+                        }
                         Key::Space => {
                             self.paused = state == &ButtonState::Release;
                         }
                         Key::C => {
                             self.world = self.world.reset(self.cell_size);
-                            self.world.mirror_edge(self.frame_size % 2);
+                            self.world.mirror_edge(self.frame_size);
                         }
                         _ => {}
                     },
