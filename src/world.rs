@@ -1,5 +1,6 @@
 use crate::cell::Cell;
 use nalgebra::{Dynamic, Matrix, Point2, Point6, VecStorage};
+use conv::{ApproxFrom};
 
 pub type WPoint = Point6<f64>;
 pub type MPoint = Point2<usize>;
@@ -11,18 +12,18 @@ pub struct World {
     matrix: WMatrix,
     surroundings_matrix: MMatrix,
     edge_width: usize,
-    width: usize,
-    height: usize,
+    cols: usize,
+    rows: usize,
 }
 
 impl World {
-    pub fn new(width: usize, height: usize, cell_size: f64) -> Self {
+    pub fn new(rows: usize, cols: usize, cell_size: f64) -> Self {
         let mut instance = Self {
-            matrix: WMatrix::from_element(height, width, WPoint::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)),
-            surroundings_matrix: MMatrix::from_element(height + 2, width + 2, MPoint::new(0, 0)),
+            matrix: WMatrix::from_element(rows, cols, WPoint::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)),
+            surroundings_matrix: MMatrix::from_element(rows + 2, cols + 2, MPoint::new(0, 0)),
             edge_width: 1,
-            width,
-            height,
+            cols,
+            rows,
         };
 
         instance.resize_cells(cell_size);
@@ -33,7 +34,7 @@ impl World {
     fn locations_matrix(
         &self,
     ) -> Matrix<MPoint, Dynamic, Dynamic, VecStorage<MPoint, Dynamic, Dynamic>> {
-        self.matrix.map_with_location(|x, y, _p| MPoint::new(x, y))
+        self.matrix.map_with_location(|row, col, _p| MPoint::new(row, col))
     }
 
     pub fn resize_cells(&mut self, cell_size: f64) {
@@ -41,11 +42,13 @@ impl World {
         let mut locations_iter = locations_matrix.iter();
 
         while let Some(location) = locations_iter.next() {
-            let x_index = location[0];
-            let y_index = location[1];
-            let w_point = &mut self.matrix[(x_index, y_index)];
-            w_point[4] = (x_index as f64) * cell_size;
-            w_point[5] = (y_index as f64) * cell_size;
+            let row = location[0];
+            let col = location[1];
+            let w_point = &mut self.matrix[(row, col)];
+            let x: f64 = ApproxFrom::<usize>::approx_from(col).unwrap();
+            let y: f64 = ApproxFrom::<usize>::approx_from(row).unwrap();
+            w_point[4] = x * cell_size;
+            w_point[5] = y * cell_size;
         }
     }
 
@@ -53,78 +56,78 @@ impl World {
         self.locations_matrix()
             .iter()
             .map(|location| {
-                let x = location[0];
-                let y = location[1];
-                self.cell_at(x, y)
+                let row = location[0];
+                let col = location[1];
+                self.cell_at(row, col)
             })
             .collect()
     }
 
-    fn cell_at(&self, x_index: usize, y_index: usize) -> Cell {
-        let w_point = self.matrix[(x_index, y_index)];
-        (w_point, x_index, y_index).into()
+    fn cell_at(&self, row: usize, col: usize) -> Cell {
+        let w_point = self.matrix[(row, col)];
+        (w_point, row, col).into()
     }
 
-    pub fn find_cell_at(&self, x_index: usize, y_index: usize) -> Option<Cell> {
-        if self.width > y_index && self.height > x_index {
-            Some(self.cell_at(x_index, y_index))
+    pub fn find_cell_at(&self, row: usize, col: usize) -> Option<Cell> {
+        if self.cols > col && self.rows > row {
+            Some(self.cell_at(row, col))
         } else {
             None
         }
     }
 
     pub fn write(&mut self, cell: Cell) {
-        let (w_point, x, y) = cell.into();
-        self.matrix[(x, y)] = w_point;
+        let (w_point, row, col) = cell.into();
+        self.matrix[(row, col)] = w_point;
     }
 
     pub fn mirror_edge(&mut self, edge_width: usize) {
         let locations_matrix = self.locations_matrix();
 
         let top_slice = locations_matrix
-            .slice((self.height - edge_width, 0), (edge_width, self.width))
+            .slice((self.rows - edge_width, 0), (edge_width, self.cols))
             .map_with_location(|row, col, loc| Point2::new(Point2::new(row, col + edge_width), loc));
         let bottom_slice = locations_matrix
-            .slice((0, 0), (edge_width, self.width))
+            .slice((0, 0), (edge_width, self.cols))
             .map_with_location(|row, col, loc| {
-                Point2::new(Point2::new(row + self.height + edge_width, col + edge_width), loc)
+                Point2::new(Point2::new(row + self.rows + edge_width, col + edge_width), loc)
             });
 
         let left_slice = locations_matrix
-            .slice((0, self.width - edge_width), (self.height, edge_width))
+            .slice((0, self.cols - edge_width), (self.rows, edge_width))
             .map_with_location(|row, col, loc| {
                 Point2::new(Point2::new(row + edge_width, col), loc)
             });
         let right_slice = locations_matrix
-            .slice((0, 0), (self.height, edge_width))
+            .slice((0, 0), (self.rows, edge_width))
             .map_with_location(|row, col, loc| {
-                Point2::new(Point2::new(row + edge_width, col + self.width + edge_width), loc)
+                Point2::new(Point2::new(row + edge_width, col + self.cols + edge_width), loc)
             });
         let top_left_slice = locations_matrix
             .slice(
-                (self.height - edge_width, self.width - edge_width),
+                (self.rows - edge_width, self.cols - edge_width),
                 (edge_width, edge_width),
             )
             .map_with_location(|row, col, loc| {
                 Point2::new(Point2::new(row, col), loc)
             });
         let top_right_slice = locations_matrix
-            .slice((self.height - edge_width, 0), (edge_width, edge_width))
+            .slice((self.rows - edge_width, 0), (edge_width, edge_width))
             .map_with_location(|row, col, loc| {
-                Point2::new(Point2::new(row, col + self.width + edge_width), loc)
+                Point2::new(Point2::new(row, col + self.cols + edge_width), loc)
             });
         let bottom_left_slice = locations_matrix
-            .slice((0, self.width - edge_width), (edge_width, edge_width))
+            .slice((0, self.cols - edge_width), (edge_width, edge_width))
             .map_with_location(|row, col, loc| {
-                Point2::new(Point2::new(row + self.height + edge_width, col), loc)
+                Point2::new(Point2::new(row + self.rows + edge_width, col), loc)
             });
         let bottom_right_slice = locations_matrix
             .slice((0, 0), (edge_width, edge_width))
             .map_with_location(|row, col, loc| {
                 Point2::new(
                     Point2::new(
-                        row + self.height + edge_width,
-                        col + self.width + edge_width,
+                        row + self.rows + edge_width,
+                        col + self.cols + edge_width,
                     ),
                     loc,
                 )
@@ -134,10 +137,10 @@ impl World {
         let mut mirrored_matrix = locations_matrix.clone();
         mirrored_matrix = mirrored_matrix.insert_columns(0, edge_width, zero_point);
         mirrored_matrix =
-            mirrored_matrix.insert_columns(self.width + edge_width , edge_width, zero_point);
+            mirrored_matrix.insert_columns(self.cols + edge_width , edge_width, zero_point);
         mirrored_matrix = mirrored_matrix.insert_rows(0, edge_width, zero_point);
         mirrored_matrix =
-            mirrored_matrix.insert_rows(self.height + edge_width, edge_width, zero_point);
+            mirrored_matrix.insert_rows(self.rows + edge_width, edge_width, zero_point);
 
         let slices = [
             top_left_slice,
@@ -163,14 +166,14 @@ impl World {
         self.edge_width = edge_width;
     }
 
-    fn get_surroundings(&self, (x, y): (usize, usize)) -> Vec<Cell> {
+    fn get_surroundings(&self, (row, col): (usize, usize)) -> Vec<Cell> {
         let side = self.edge_width * 2 + 1;
 
-        let surroundings = self.surroundings_matrix.slice((x, y), (side, side));
+        let surroundings = self.surroundings_matrix.slice((row, col), (side, side));
 
         surroundings
             .iter()
-            .filter(|at| at[0] != x || at[1] != y)
+            .filter(|at| at[0] != row || at[1] != col)
             .map(|at| self.cell_at(at[0], at[1]))
             .collect()
     }

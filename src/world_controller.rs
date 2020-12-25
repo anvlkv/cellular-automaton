@@ -7,6 +7,7 @@ use palette::{Gradient, Hsv, LinSrgba};
 use piston::input::{Button, ButtonArgs, Input, Key, Motion, MouseButton, RenderArgs, ResizeArgs};
 use piston::{ButtonState, Event, Loop};
 use std::vec::IntoIter;
+use conv::{ApproxInto, ApproxFrom};
 
 enum CursorAction {
     Paint,
@@ -21,6 +22,7 @@ pub struct WorldController {
     cursor_colors_iter: IntoIter<Color>,
     cursor_action: Option<CursorAction>,
     paused: bool,
+    speed: isize,
 }
 
 fn cursor_colors_iter() -> IntoIter<Color> {
@@ -61,31 +63,33 @@ impl WorldController {
             cursor_action: None,
             frame_size: 3,
             paused: true,
+            speed: 1
         }
     }
 
     fn size_world(width: f64, height: f64) -> (usize, usize, f64) {
         let cell_size = Self::get_cell_size(width, height);
-
+        let rows: f64 = height / cell_size;
+        let cols: f64 = width / cell_size;
         (
-            (height / cell_size) as usize, // count rows
-            (width / cell_size) as usize,  // count columns
+            ApproxFrom::<f64>::approx_from(rows).unwrap(), // count rows
+            ApproxFrom::<f64>::approx_from(cols).unwrap(),  // count columns
             cell_size,
         )
     }
 
     fn set_cursor(&mut self, [x, y]: [f64; 2]) {
-        let cell_x: usize = (x / self.cell_size) as usize;
-        let cell_y: usize = (y / self.cell_size) as usize;
+        let col: usize = ApproxFrom::<f64>::approx_from(x / self.cell_size).unwrap();
+        let row: usize = ApproxFrom::<f64>::approx_from(y / self.cell_size).unwrap();
 
-        match self.world.find_cell_at(cell_x, cell_y) {
+        match self.world.find_cell_at(row, col) {
             Some(cell) => {
                 let color = match &self.cursor {
                     Some(c) => c.color,
                     None => WHITE,
                 };
                 self.cursor = Some(Cell { color, ..cell });
-                if (cell_x, cell_y) != cell.at {
+                if (row, col) != cell.at {
                     self.cursor_colors_iter = cursor_colors_iter();
                 }
             }
@@ -110,7 +114,9 @@ impl WorldController {
                 }
                 Loop::Update(_) => {
                     if !self.paused {
-                        self.update();
+                        for _i in 0 .. self.speed {
+                            self.update();
+                        }
                     }
                 }
                 _ => {}
@@ -120,9 +126,9 @@ impl WorldController {
                     window_size,
                     draw_size: _,
                 }) => {
-                    let (width, height, cell_size) =
+                    let (rows, cols, cell_size) =
                         Self::size_world(window_size[0], window_size[1]);
-                    self.world = World::new(width, height, cell_size);
+                    self.world = World::new(rows, cols, cell_size);
                     self.cell_size = cell_size;
                     self.world.mirror_edge(self.frame_size % 2);
                 }
@@ -176,8 +182,12 @@ impl WorldController {
                         _ => {}
                     },
                     Button::Keyboard(k) => match k {
-                        Key::Right => {}
-                        Key::Left => {}
+                        Key::Right => {
+                            self.speed += 1;
+                        }
+                        Key::Left => {
+                            self.speed -= 1;
+                        }
                         Key::Up => {}
                         Key::Down => {}
                         Key::Space => {

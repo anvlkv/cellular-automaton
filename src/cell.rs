@@ -13,7 +13,7 @@ pub struct Cell {
 }
 
 impl From<CellRepresntation> for Cell {
-    fn from((w_point, x_index, y_index): CellRepresntation) -> Self {
+    fn from((w_point, row, col): CellRepresntation) -> Self {
         let r = w_point[0];
         let g = w_point[1];
         let b = w_point[2];
@@ -29,7 +29,7 @@ impl From<CellRepresntation> for Cell {
                 f32::approx_from(a).unwrap(),
             ],
             top_left: Point2::new(x, y),
-            at: (x_index, y_index),
+            at: (row, col),
         }
     }
 }
