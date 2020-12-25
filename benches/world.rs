@@ -2,6 +2,7 @@
 extern crate bencher;
 use bencher::Bencher;
 use cellular_automaton::world::World;
+use std::mem::size_of_val;
 
 fn one_one_get_cells(bench: &mut Bencher) {
     let mut world = World::new(1, 1, 1.0);
@@ -9,7 +10,9 @@ fn one_one_get_cells(bench: &mut Bencher) {
 
     bench.iter(|| {
         world.get_cells();
-    })
+    });
+
+    bench.bytes = size_of_val(&world) as u64;
 }
 
 fn hundred_one_get_cells(bench: &mut Bencher) {
@@ -18,7 +21,9 @@ fn hundred_one_get_cells(bench: &mut Bencher) {
 
     bench.iter(|| {
         world.get_cells();
-    })
+    });
+
+    bench.bytes = size_of_val(&world) as u64;
 }
 
 fn hundred_three_get_cells(bench: &mut Bencher) {
@@ -27,7 +32,9 @@ fn hundred_three_get_cells(bench: &mut Bencher) {
 
     bench.iter(|| {
         world.get_cells();
-    })
+    });
+
+    bench.bytes = size_of_val(&world) as u64;
 }
 
 fn one_one_update(bench: &mut Bencher) {
@@ -36,7 +43,9 @@ fn one_one_update(bench: &mut Bencher) {
 
     bench.iter(|| {
         world.next(|_, _| None);
-    })
+    });
+
+    bench.bytes = size_of_val(&world) as u64;
 }
 
 fn hundred_one_update(bench: &mut Bencher) {
@@ -45,7 +54,9 @@ fn hundred_one_update(bench: &mut Bencher) {
 
     bench.iter(|| {
         world.next(|_, _| None);
-    })
+    });
+
+    bench.bytes = size_of_val(&world) as u64;
 }
 
 fn hundred_three_update(bench: &mut Bencher) {
@@ -54,7 +65,9 @@ fn hundred_three_update(bench: &mut Bencher) {
 
     bench.iter(|| {
         world.next(|_, _| None);
-    })
+    });
+
+    bench.bytes = size_of_val(&world) as u64;
 }
 
 benchmark_group!(get_cells, one_one_get_cells, hundred_one_get_cells);
