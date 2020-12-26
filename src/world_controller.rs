@@ -99,7 +99,7 @@ impl WorldController {
         }
     }
 
-    fn flow_cursor_color(&mut self, [x, y]: [f64; 2]) {
+    fn flow_cursor_color(&mut self, [_x, _y]: [f64; 2]) {
         if let Some(mut cell) = self.cursor.as_mut() {
             match self.cursor_colors_iter.next() {
                 Some(c) => cell.color = c,
@@ -291,7 +291,7 @@ impl WorldController {
             || is_chanel_alive(cell, &Chanels::Blue)
         }
 
-        fn is_super_nova(cell: &Cell) -> bool {
+        fn _is_super_nova(cell: &Cell) -> bool {
             let [r, g, b, a] = cell.color;
             (r + g + b) * a >= 3.0
         }
@@ -305,7 +305,7 @@ impl WorldController {
             }
         }
 
-        fn is_chanel_growing(cell: &Cell, ch: &Chanels) -> bool {
+        fn _is_chanel_growing(cell: &Cell, ch: &Chanels) -> bool {
             let [r, g, b, a] = cell.color;
             match ch {
                 Chanels::Red => r * a > 0.5,
