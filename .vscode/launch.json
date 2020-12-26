@@ -11,11 +11,11 @@
             "cargo": {
                 "args": [
                     "build",
-                    "--bin=cellular-automaton",
+                    "--bin=ca",
                     "--package=cellular-automaton"
                 ],
                 "filter": {
-                    "name": "cellular-automaton",
+                    "name": "ca",
                     "kind": "bin"
                 }
             },
