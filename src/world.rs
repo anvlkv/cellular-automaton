@@ -12,6 +12,7 @@ pub struct World {
     matrix: WMatrix,
     surroundings_matrix: MMatrix,
     locations_matrix: MMatrix,
+    dead_pool: Vec<MPoint>,
     edge_width: usize,
     cols: usize,
     rows: usize,
@@ -19,16 +20,21 @@ pub struct World {
 
 impl World {
     pub fn new(rows: usize, cols: usize, cell_size: f64) -> Self {
+
+        let matrix = WMatrix::from_element(rows, cols, WPoint::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
+        let locations_matrix = matrix.map_with_location(|row, col, _p| MPoint::new(row, col)).clone();
+        let dead_pool: Vec<MPoint> = locations_matrix.clone().into_iter().map(|p| *p).collect();
+
         let mut instance = Self {
-            matrix: WMatrix::from_element(rows, cols, WPoint::new(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)),
+            matrix,
             surroundings_matrix: MMatrix::from_element(rows + 2, cols + 2, MPoint::new(0, 0)),
-            locations_matrix: MMatrix::from_element(rows, cols, MPoint::new(0, 0)),
+            locations_matrix,
+            dead_pool,
             edge_width: 1,
             cols,
             rows,
         };
 
-        instance.locations_matrix();
         instance.resize_cells(cell_size);
 
         instance
@@ -36,12 +42,6 @@ impl World {
 
     pub fn reset(&self, cell_size: f64) -> Self {
         World::new(self.rows, self.cols, cell_size)
-    }
-
-    fn locations_matrix(
-        &mut self,
-    ) {
-       self.locations_matrix = self.matrix.map_with_location(|row, col, _p| MPoint::new(row, col)).clone();
     }
 
     pub fn resize_cells(&mut self, cell_size: f64) {
@@ -61,10 +61,15 @@ impl World {
     pub fn get_cells(&self) -> Vec<Cell> {
         self.locations_matrix
             .iter()
-            .map(|location| {
-                let row = location[0];
-                let col = location[1];
-                self.cell_at(row, col)
+            .filter_map(|location| {
+                if self.dead_pool.contains(&location) {
+                    None
+                }
+                else {
+                    let row = location[0];
+                    let col = location[1];
+                    Some(self.cell_at(row, col))
+                }
             })
             .collect()
     }
@@ -85,6 +90,18 @@ impl World {
     pub fn write(&mut self, cell: Cell) {
         let (w_point, row, col) = cell.into();
         self.matrix[(row, col)] = w_point;
+        
+        let location = self.locations_matrix[(row, col)];
+        let dead_pool_index = self.dead_pool.iter().position(|p| p == &location);
+
+        if w_point[0]==0.0 && w_point[1]==0.0 && w_point[2]==0.0&& w_point[3]==0.0 {
+            if dead_pool_index.is_none() {
+                self.dead_pool.push(location);
+            }
+        }
+        else if let Some(i) = dead_pool_index {
+            self.dead_pool.remove(i);
+        }
     }
 
     pub fn mirror_edge(&mut self, edge_width: usize) {
@@ -177,8 +194,16 @@ impl World {
 
         surroundings
             .iter()
-            .filter(|at| at[0] != row || at[1] != col)
-            .map(|at| self.cell_at(at[0], at[1]))
+            .filter_map(|location| {
+                if self.dead_pool.contains(&location)
+                || location[0] != row 
+                || location[1] != col {
+                    None
+                }
+                else {
+                    Some(self.cell_at(location[0], location[1]))
+                }
+            })
             .collect()
     }
 
