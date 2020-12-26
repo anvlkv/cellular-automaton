@@ -53,11 +53,12 @@ fn cursor_colors_iter() -> IntoIter<Color> {
     colors_vec.into_iter()
 }
 
-
 impl WorldController {
     pub fn new() -> Self {
+        let world = World::new(0, 0, 0.0);
+
         Self {
-            world: World::new(0, 0, 0.0),
+            world,
             cell_size: 0.0,
             cursor: None,
             cursor_colors_iter: cursor_colors_iter(),
@@ -107,7 +108,7 @@ impl WorldController {
         }
     }
 
-    pub fn handle_event(&'static mut self, e: &Event, gl: &mut GlGraphics) {
+    pub fn handle_event(&mut self, e: &Event, gl: &mut GlGraphics) {
         match e {
             Event::Loop(lp) => match lp {
                 Loop::Render(args) => {
@@ -115,9 +116,9 @@ impl WorldController {
                 }
                 Loop::Update(_) => {
                     if !self.paused {
-                        self.update();
-                        // for _i in 0 .. self.speed {
-                        // }
+                        for _i in 0 .. self.speed {
+                            self.update();
+                        }
                     }
                 }
                 _ => {}
@@ -129,10 +130,9 @@ impl WorldController {
                 }) => {
                     let (rows, cols, cell_size) =
                         Self::size_world(window_size[0], window_size[1]);
-                    // self.world = World::new(rows, cols, cell_size);
-                    self.world.resize(rows, cols, cell_size);
-                    self.world.mirror_edge(self.frame_size);
+                    self.world = World::new(rows, cols, cell_size);
                     self.cell_size = cell_size;
+                    self.world.mirror_edge(self.frame_size);
                 }
                 Input::Move(motion) => match motion {
                     Motion::MouseCursor(position) => {
@@ -207,7 +207,7 @@ impl WorldController {
                             self.paused = state == &ButtonState::Release;
                         }
                         Key::C => {
-                            self.world.reset();
+                            self.world = self.world.reset(self.cell_size);
                             self.world.mirror_edge(self.frame_size);
                         }
                         _ => {}
@@ -278,7 +278,7 @@ impl WorldController {
         });
     }
 
-    pub fn update(&'static mut self) {
+    pub fn update(&mut self) {
         enum Chanels {
             Red,
             Green,
@@ -315,29 +315,35 @@ impl WorldController {
         }
 
 
-        let frame_size = self.frame_size;
 
-        let the_rule = move |neighbors: Vec<Cell>, mut t_cell: Cell| {
+
+        let the_rule = |neighbors: Vec<Cell>, t_cell: Cell| {
             let alive = is_alive(&t_cell);
             let neighbors_alive = neighbors.iter().filter(|n| is_alive(*n));
-            if neighbors_alive.clone().count() >= frame_size * 4 {
+            if neighbors_alive.clone().count() >= self.frame_size * 4 {
                 if alive {
-                    t_cell.color = DEAD;
-                    Some(t_cell)
+                    Some(Cell {
+                        color: DEAD,
+                        ..t_cell
+                    })
                 } else {
                     None
                 }
-            } else if neighbors_alive.clone().count() >= frame_size * 3 {
+            } else if neighbors_alive.clone().count() >= self.frame_size * 3 {
                 if !alive {
-                    t_cell.color = SUPER_NOVA;
-                    Some(t_cell)
+                    Some(Cell {
+                        color: SUPER_NOVA,
+                        ..t_cell
+                    })
                 } else {
                     None
                 }
-            } else if neighbors_alive.count() < frame_size * 2 {
+            } else if neighbors_alive.count() < self.frame_size * 2 {
                 if alive {                                                                                       
-                    t_cell.color = DEAD;
-                    Some(t_cell)
+                    Some(Cell {
+                        color: DEAD,
+                        ..t_cell
+                    })
                 } else {
                     None
                 }
@@ -345,7 +351,11 @@ impl WorldController {
                 None
             }
         };
+        let write_cells = self.world.next(the_rule);
+        let mut write_cells_iter = write_cells.iter();
 
-        self.world.next(the_rule);
+        while let Some(w_c) = write_cells_iter.next() {
+            self.world.write(*w_c);
+        }
     }
 }
