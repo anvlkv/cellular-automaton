@@ -1,3 +1,4 @@
+use std::sync::mpsc::channel;
 use crate::cell::Cell;
 use nalgebra::{Dynamic, Matrix, Point2, Point6, VecStorage};
 use conv::{ApproxFrom};
@@ -8,11 +9,13 @@ type XMatrix<T> = Matrix<T, Dynamic, Dynamic, VecStorage<T, Dynamic, Dynamic>>;
 type WMatrix = XMatrix<WPoint>;
 type MMatrix = XMatrix<MPoint>;
 
+#[derive(Clone)]
 pub struct World {
     matrix: WMatrix,
     surroundings_matrix: MMatrix,
     locations_matrix: MMatrix,
     edge_width: usize,
+    cell_size: f64,
     cols: usize,
     rows: usize,
 }
@@ -24,6 +27,7 @@ impl World {
             surroundings_matrix: MMatrix::from_element(rows + 2, cols + 2, MPoint::new(0, 0)),
             locations_matrix: MMatrix::from_element(rows, cols, MPoint::new(0, 0)),
             edge_width: 1,
+            cell_size,
             cols,
             rows,
         };
@@ -34,8 +38,20 @@ impl World {
         instance
     }
 
-    pub fn reset(&self, cell_size: f64) -> Self {
-        World::new(self.rows, self.cols, cell_size)
+    pub fn reset(&mut self) {
+        let new_instance = World::new(self.rows, self.cols, self.cell_size);
+
+        self.mirror_edge(self.edge_width);
+        
+        self.matrix = new_instance.matrix;
+        self.surroundings_matrix = new_instance.surroundings_matrix;
+    }
+
+    pub fn resize(&mut self, rows: usize, cols: usize, cell_size: f64) {
+        self.rows = rows;
+        self.cols = cols;
+        self.cell_size = cell_size;
+        self.reset();
     }
 
     fn locations_matrix(
@@ -182,23 +198,49 @@ impl World {
             .collect()
     }
 
-    pub fn next<F>(&self, func: F) -> Vec<Cell>
+    pub fn next<'a, F>(&'static mut self, rule: F)
     where
-        F: Fn(Vec<Cell>, Cell) -> Option<Cell>
+        F: FnOnce(Vec<Cell>, Cell) -> Option<Cell>,
+        F: Send + 'static,
+        F: Copy
     {
-        let cells_vec = self.get_cells();
-        let mut cells = cells_vec.iter();
-        let mut write_cells = Vec::new();
+        let mut cells_vec = self.get_cells();
+        let mut handles = Vec::new();
+        let frame = (self.edge_width * 2 + 1)^2;
+        let total_cells = cells_vec.len();
+        for t in 0 .. (total_cells / frame) {
+            let slc = cells_vec.split_off(total_cells - frame * (t + 1) );
+            // let t_rule = rule.clone();
+            handles.push(std::thread::spawn(move || {
+                let mut cells = slc.into_iter();
+                let mut write_cells = Vec::new();
+                while let Some(cell) = cells.next() {
+                    let surroundings = self.get_surroundings(cell.at);
+                    match rule(surroundings, cell) {
+                        Some(c) => {
+                            write_cells.push(c);
+                        },
+                        None => {}
+                    }
+                }
+                write_cells
+            }));
+        }
+
         
-        while let Some(cell) = cells.next() {
-            let surroundings = self.get_surroundings(cell.at);
-            match &func(surroundings, *cell) {
-                Some(c) => {
-                    write_cells.push(*c);
-                },
-                None => {}
+        
+        // let mut updated_self = ;
+
+        for h in handles {
+            let updates = h.join().unwrap();
+            for c in updates {
+                self.write(c);
+                
             }
         }
-        write_cells
+        
+
+
+        
     }
 }
